@@ -2190,19 +2190,20 @@ const keyToFile = {
 };
 
 function resolveRoute(hashString = window.location.hash) {
-  const fileName = window.location.pathname.split('/').pop().toLowerCase();
+  const rawFile = window.location.pathname.split('/').pop().toLowerCase();
+  const fileName = rawFile.replace(/\.html$/, '') || 'index';
   const fileMap = {
-    'index.html': 'dashboard',
+    'index': 'dashboard',
     '': 'dashboard',
-    'inbox.html': 'inbox',
-    'calendar.html': 'calendar',
-    'employees.html': 'employees',
-    'attendance.html': 'attendance',
-    'performance.html': 'performance',
-    'kpi.html': 'kpi',
-    'payroll.html': 'payroll',
-    'leave.html': 'leave',
-    'recruitment.html': 'recruitment'
+    'inbox': 'inbox',
+    'calendar': 'calendar',
+    'employees': 'employees',
+    'attendance': 'attendance',
+    'performance': 'performance',
+    'kpi': 'kpi',
+    'payroll': 'payroll',
+    'leave': 'leave',
+    'recruitment': 'recruitment'
   };
 
   const urlParams = new URLSearchParams(window.location.search || '');
@@ -2251,9 +2252,9 @@ function openModule(key, updateUrl = true, params = null) {
     selectedEmployeeName = params.name;
   }
 
-  const currentFile = window.location.pathname.split('/').pop().toLowerCase() || 'index.html';
+  const currentFile = (window.location.pathname.split('/').pop().toLowerCase() || 'index').replace(/\.html$/, '');
   const targetFile = keyToFile[key] || 'index.html';
-  const targetBase = targetFile.split('?')[0];
+  const targetBase = targetFile.split('?')[0].replace(/\.html$/, '');
 
   if (updateUrl && targetBase !== currentFile && !window.location.protocol.startsWith('file')) {
     let dest = targetFile;

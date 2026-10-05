@@ -24,3 +24,5 @@ app.js.flat-backup
 preview*.png
 fresh_*.png
 screenshot*.png
+
+.vercel

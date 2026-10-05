@@ -120,6 +120,24 @@ function persistEmployeeData() {
     localStorage.setItem('teamhub.employeeData', JSON.stringify(employeeData));
     localStorage.setItem('teamhub.employeeIds', JSON.stringify(Object.fromEntries(employeeIdByName)));
   } catch {}
+  if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
+  if (typeof window !== 'undefined' && window.fetch) {
+    window.fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employees: employeeData.map((p, i) => ({
+          id: `EMP-${getEmployeeId(p) || String(i + 1).padStart(4, '0')}`,
+          name: p[0],
+          email: p[1],
+          department: p[2],
+          title: p[3],
+          status: p[4] || 'On-Time',
+          work_model: employeeProfileOverrides[p[0]]?.workModel || 'Hybrid'
+        }))
+      })
+    }).catch(() => {});
+  }
 }
 
 function migrateLegacyBrandData() {
@@ -229,7 +247,18 @@ const defaultCalendarItems = [
   { id: 'cal-12', day: 29, date: '2035-06-29', title: 'Internal Team-Building Event', time: '08:00 AM', location: 'Kurnia Green Park', category: 'Workplace Engagement', note: 'Sportswear and casual gear', tone: 2 }
 ];
 let calendarItems = readStoredValue('teamhub.calendarItems', defaultCalendarItems);
-function persistCalendarItems() { writeStoredValue('teamhub.calendarItems', calendarItems); }
+function persistCalendarItems() {
+  writeStoredValue('teamhub.calendarItems', calendarItems);
+  if (typeof renderDashboardMiniCalendar === 'function') renderDashboardMiniCalendar();
+  if (typeof renderDashboardScheduleList === 'function') renderDashboardScheduleList();
+  if (typeof window !== 'undefined' && window.fetch) {
+    window.fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ calendar: calendarItems })
+    }).catch(() => {});
+  }
+}
 
 /* ==========================================================================
    Leave Requests Store
@@ -248,7 +277,17 @@ const defaultLeaveRequests = [
   { id: 'lv-10', name: 'Kelvin Yu', title: 'Training Coordinator', type: 'Other Leave', submitDate: '13 Jun 2035', period: '14 Jun 2035', duration: '1 Day', reason: 'Volunteer program', status: 'Rejected' }
 ];
 let leaveRequests = readStoredValue('teamhub.leaveRequests', defaultLeaveRequests);
-function persistLeaveRequests() { writeStoredValue('teamhub.leaveRequests', leaveRequests); }
+function persistLeaveRequests() {
+  writeStoredValue('teamhub.leaveRequests', leaveRequests);
+  if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
+  if (typeof window !== 'undefined' && window.fetch) {
+    window.fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ leave: leaveRequests })
+    }).catch(() => {});
+  }
+}
 
 /* ==========================================================================
    Applicants Store (Recruitment)
@@ -263,7 +302,17 @@ const defaultApplicants = [
   { id: 'app-6', name: 'Bagus Pratama', email: 'bagus.pratama@email.com', position: 'Full-stack Engineer', appliedDate: '16 Jun 2035', type: 'Full-Time Hybrid', stage: 'Application Received' }
 ];
 let applicantsData = readStoredValue('teamhub.applicants', defaultApplicants);
-function persistApplicants() { writeStoredValue('teamhub.applicants', applicantsData); }
+function persistApplicants() {
+  writeStoredValue('teamhub.applicants', applicantsData);
+  if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
+  if (typeof window !== 'undefined' && window.fetch) {
+    window.fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ applicants: applicantsData })
+    }).catch(() => {});
+  }
+}
 
 /* ==========================================================================
    Departments & Divisions Data Store
@@ -317,7 +366,16 @@ const defaultKpiData = [
 ];
 
 let kpiData = readStoredValue('teamhub.kpiData', defaultKpiData);
-function persistKpiData() { writeStoredValue('teamhub.kpiData', kpiData); }
+function persistKpiData() {
+  writeStoredValue('teamhub.kpiData', kpiData);
+  if (typeof window !== 'undefined' && window.fetch) {
+    window.fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kpis: kpiData })
+    }).catch(() => {});
+  }
+}
 
 /* ==========================================================================
    User Accounts & Role-Based Access (RBAC) Store
@@ -545,6 +603,66 @@ function renderDashboardScheduleList(day = selectedDate) {
       </div>
     </article>
   `).join('');
+}
+
+
+function renderDashboardSummary() {
+  const totalEmployeesEl = document.querySelector('#dashTotalEmployees');
+  const attendanceRateEl = document.querySelector('#dashAttendanceRate');
+  const leaveRequestsEl = document.querySelector('#dashLeaveRequests');
+  const leaveBandEl = document.querySelector('#dashLeaveBand');
+  const applicantsEl = document.querySelector('#dashApplicants');
+  const applicantsBandEl = document.querySelector('#dashApplicantsBand');
+  const empTotalEl = document.querySelector('.employment-total');
+
+  const total = employeeData.length;
+  if (totalEmployeesEl) totalEmployeesEl.innerHTML = `${total} <small>Employees</small>`;
+  if (empTotalEl) empTotalEl.innerHTML = `${total} <small>Employees</small>`;
+
+  const onTimeCount = employeeData.filter(p => p[4] === 'On-Time').length;
+  const lateCount = employeeData.filter(p => p[4] === 'Late').length;
+  const leaveCount = employeeData.filter(p => p[4] === 'On Leave').length;
+  const rate = total ? Math.round((onTimeCount / total) * 100) : 92;
+
+  if (attendanceRateEl) {
+    attendanceRateEl.innerHTML = `${rate}% <small>Present · ${leaveCount} On Leave, ${lateCount} Late</small>`;
+  }
+
+  const approvedLeave = leaveRequests.filter(r => r.status === 'Approved').length;
+  const pendingLeave = leaveRequests.filter(r => r.status === 'Pending').length;
+  if (leaveRequestsEl) {
+    leaveRequestsEl.innerHTML = `${approvedLeave} <small>Approved</small> <b>${pendingLeave}</b> <small>Pending Review</small>`;
+  }
+  if (leaveBandEl) {
+    leaveBandEl.innerHTML = `Tercatat <strong>${leaveRequests.length} pengajuan cuti</strong> dalam sistem`;
+  }
+
+  const appCount = applicantsData.length;
+  if (applicantsEl) {
+    applicantsEl.innerHTML = `${appCount} <small>Pelamar Aktif</small>`;
+  }
+  if (applicantsBandEl) {
+    applicantsBandEl.innerHTML = `Tim Anda memiliki <strong>${appCount} pelamar kerja aktif</strong>`;
+  }
+
+  // Update employment breakdown
+  const fullTime = employeeData.filter(p => {
+    const ov = employeeProfileOverrides[p[0]];
+    return !ov?.employmentType || ov.employmentType === 'Full-Time';
+  }).length;
+  const partTime = employeeData.filter(p => employeeProfileOverrides[p[0]]?.employmentType === 'Part-Time').length;
+  const intern = employeeData.filter(p => employeeProfileOverrides[p[0]]?.employmentType === 'Internship').length;
+  const freelance = Math.max(0, total - fullTime - partTime - intern);
+
+  const legend = document.querySelector('.employment-legend');
+  if (legend) {
+    legend.innerHTML = `
+      <div><i class="legend-full"></i><span><strong>Full-Time</strong><small>${total ? Math.round((fullTime/total)*100) : 75}% — ${fullTime} Pegawai</small></span></div>
+      <div><i class="legend-part"></i><span><strong>Part-Time</strong><small>${total ? Math.round((partTime/total)*100) : 15}% — ${partTime} Pegawai</small></span></div>
+      <div><i class="legend-free"></i><span><strong>Freelance/Kontrak</strong><small>${total ? Math.round((freelance/total)*100) : 10}% — ${freelance} Pegawai</small></span></div>
+      <div><i class="legend-intern"></i><span><strong>Internship</strong><small>${total ? Math.round((intern/total)*100) : 0}% — ${intern} Pegawai</small></span></div>
+    `;
+  }
 }
 
 /* ==========================================================================
@@ -3562,6 +3680,35 @@ moduleView.addEventListener('click', (event) => {
   }
 
   // Clock-in / Clock-out button in Attendance
+  
+  // Dashboard Interactive Navigation Cards
+  if (action === 'nav-employees') { openModule('employees'); return; }
+  if (action === 'nav-attendance') { openModule('attendance'); return; }
+  if (action === 'nav-leave') { openModule('leave'); return; }
+  if (action === 'nav-recruitment') { openModule('recruitment'); return; }
+
+  // Contextual Kebab Option Actions
+  if (action === 'kebab-employees') {
+    event.stopPropagation();
+    document.querySelector('#employeeDialog')?.showModal();
+    return;
+  }
+  if (action === 'kebab-attendance') {
+    event.stopPropagation();
+    openModule('attendance');
+    return;
+  }
+  if (action === 'kebab-leave') {
+    event.stopPropagation();
+    openActionDialog('request-leave');
+    return;
+  }
+  if (action === 'kebab-recruitment') {
+    event.stopPropagation();
+    openActionDialog('add-candidate');
+    return;
+  }
+
   if (action === 'clock-in') {
     const isClocked = userAttendanceRecord && userAttendanceRecord.clockedIn;
     const now = new Date();
@@ -4633,6 +4780,7 @@ function setupDashboardControls() {
 
   setupGlobalSearch();
   setupThemeAndMobile();
+  renderDashboardSummary();
 
   // Calendar month buttons
   document.querySelector('#prevMonth')?.addEventListener('click', () => {
@@ -4710,6 +4858,364 @@ function setupDashboardControls() {
   });
 }
 
+
+// ============================================================================
+// Robust Document-Level Delegated Form Handler
+// Ensures all forms submit properly across SPA transitions and subpages
+// ============================================================================
+document.addEventListener('submit', (event) => {
+  const form = event.target;
+  if (!form || !form.id) return;
+
+  // 1. Employee Form
+  if (form.id === 'employeeForm') {
+    event.preventDefault();
+    const name = (form.elements.name?.value || '').trim();
+    const email = (form.elements.email?.value || '').trim();
+    const dept = form.elements.department?.value || 'Operations';
+    const title = (form.elements.title?.value || '').trim();
+    const workModel = form.elements.workModel?.value || 'Hybrid';
+    const employmentType = form.elements.employmentType?.value || 'Full-Time';
+
+    if (!name) return;
+    employeeData.unshift([name, email, dept, title, 'On-Time']);
+    getEmployeeId(name);
+    if (!employeeProfileOverrides[name]) employeeProfileOverrides[name] = {};
+    employeeProfileOverrides[name].workModel = workModel;
+    employeeProfileOverrides[name].employmentType = employmentType;
+    persistProfileOverrides();
+    persistEmployeeData();
+    updateEmployeeDatalist();
+    form.reset();
+    document.querySelector('#employeeDialog')?.close();
+    openModule('employees');
+    showToast(`${name} berhasil ditambahkan ke direktori karyawan`);
+    return;
+  }
+
+  // 2. Edit Employee Form
+  if (form.id === 'editEmployeeForm') {
+    event.preventDefault();
+    const originalName = form.elements.originalName?.value;
+    const name = (form.elements.name?.value || '').trim();
+    const email = (form.elements.email?.value || '').trim();
+    const dept = form.elements.department?.value || 'Operations';
+    const title = (form.elements.title?.value || '').trim();
+    const status = form.elements.status?.value || 'On-Time';
+    const workModel = form.elements.workModel?.value || 'Hybrid';
+
+    const empIndex = employeeData.findIndex(p => p[0] === originalName);
+    let syncInfo = null;
+    if (empIndex >= 0) {
+      const oldEmail = employeeData[empIndex][1];
+      employeeData[empIndex] = [name, email, dept, title, status];
+      if (name !== originalName && employeeIdByName.has(originalName)) {
+        employeeIdByName.set(name, employeeIdByName.get(originalName));
+      }
+      if (!employeeProfileOverrides[name]) employeeProfileOverrides[name] = {};
+      employeeProfileOverrides[name].workModel = workModel;
+      persistProfileOverrides();
+      persistEmployeeData();
+      syncInfo = syncEmployeeChange(originalName, oldEmail, { name, email, department: dept });
+      updateDepartmentDropdowns();
+    }
+    document.querySelector('#editEmployeeDialog')?.close();
+    openModule(moduleView.dataset.page || 'employees');
+    const parts = [];
+    if (syncInfo?.kpi) parts.push(`${syncInfo.kpi} KPI`);
+    if (syncInfo?.dept) parts.push(`${syncInfo.dept} divisi`);
+    if (syncInfo?.users) parts.push(`${syncInfo.users} akun`);
+    showToast(`Data karyawan ${name} berhasil diperbarui.${parts.length ? ' Tersinkron ke ' + parts.join(', ') + '.' : ''}`);
+    return;
+  }
+
+  // 3. Action Form (Calendar Event, Leave, Candidate, Payrun, Review)
+  if (form.id === 'actionForm' || form.id === 'actionDialogForm') {
+    event.preventDefault();
+    const values = Object.fromEntries(new FormData(form).entries());
+
+    if (activeAction === 'new-event') {
+      const timeFormatted = values.time ? new Date(`2000-01-01T${values.time}`).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '09:00 AM';
+      const parsedDate = values.date ? new Date(values.date) : new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedDate);
+      const day = parsedDate.getDate();
+      const isoDate = values.date || `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      const newEvent = {
+        id: `cal-${Date.now()}`,
+        day,
+        date: isoDate,
+        title: values.title || 'Agenda Baru',
+        time: timeFormatted,
+        location: values.location || 'Ruang Rapat',
+        category: values.category || 'Talent Acquisition',
+        note: values.note || '',
+        tone: values.category === 'Employee Development' ? 1 : (values.category === 'Workplace Engagement' ? 2 : 0)
+      };
+      calendarItems.unshift(newEvent);
+      persistCalendarItems();
+      selectedDate = day;
+      openModule('calendar');
+      const mName = new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(parsedDate);
+      showToast(`Agenda "${values.title}" berhasil dijadwalkan pada tanggal ${day} ${mName}.`);
+    } else if (activeAction === 'request-leave') {
+      const newReq = {
+        id: `lv-${Date.now()}`,
+        name: userProfile.name,
+        title: userProfile.role,
+        type: values.type || 'Annual Leave',
+        submitDate: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+        period: `${values.start || ''} s/d ${values.end || ''}`,
+        duration: '3 Days',
+        reason: values.note || 'Keperluan pribadi',
+        status: 'Pending'
+      };
+      leaveRequests.unshift(newReq);
+      persistLeaveRequests();
+      openModule('leave');
+      showToast('Permohonan cuti berhasil diajukan dan sedang menunggu persetujuan manajer.');
+    } else if (activeAction === 'add-candidate') {
+      const newCand = {
+        id: `app-${Date.now()}`,
+        name: values.name,
+        email: values.email,
+        position: values.position || 'UI Designer',
+        appliedDate: 'Hari Ini',
+        type: values.workModel || 'Full-Time On-Site',
+        stage: 'Application Received'
+      };
+      applicantsData.unshift(newCand);
+      persistApplicants();
+      openModule('recruitment');
+      showToast(`Pelamar baru ${values.name} berhasil didaftarkan ke sistem.`);
+    } else if (activeAction === 'new-payrun') {
+      showToast(`Daftar gaji periode ${values.period} siap diproses dan ditransfer pada tanggal ${values.paymentDate}.`);
+    } else if (activeAction === 'create-review') {
+      showToast(`Periode penilaian "${values.cycle}" berhasil dibuka.`);
+    }
+
+    document.querySelector('#actionDialog')?.close();
+    form.reset();
+    return;
+  }
+
+  // 4. KPI Form
+  if (form.id === 'kpiForm') {
+    event.preventDefault();
+    const data = new FormData(form);
+    const title = (data.get('title') || '').trim();
+    const dept = data.get('dept') || (departmentsData[0]?.name || 'Product Design');
+    const pic = (data.get('pic') || '').trim() || userProfile.name;
+    const target = Number(data.get('target')) || 100;
+    const unit = (data.get('unit') || '%').trim();
+    const weight = Number(data.get('weight')) || 20;
+    const period = data.get('period') || 'Q2 2035';
+    const lowerIsBetter = data.get('lowerIsBetter') === 'true';
+
+    const newKpi = {
+      id: `kpi-${Date.now()}`,
+      title,
+      dept,
+      pic,
+      target,
+      actual: 0,
+      unit,
+      weight,
+      period,
+      lowerIsBetter,
+      status: 'On-Track',
+      notes: 'Target indikator kinerja baru.'
+    };
+
+    kpiData.unshift(newKpi);
+    persistKpiData();
+    form.reset();
+    document.querySelector('#kpiDialog')?.close();
+    openModule('kpi');
+    showToast(`Indikator KPI "${title}" berhasil ditambahkan.`);
+    return;
+  }
+
+  // 5. Update KPI Progress Form
+  if (form.id === 'updateKpiForm') {
+    event.preventDefault();
+    const data = new FormData(form);
+    const id = data.get('kpiId');
+    const actual = Number(data.get('actual')) || 0;
+    const notes = (data.get('notes') || '').trim();
+
+    const kpi = kpiData.find(k => k.id === id);
+    if (kpi) {
+      kpi.actual = actual;
+      if (notes) kpi.notes = notes;
+      let score = kpi.lowerIsBetter ? (kpi.target / (kpi.actual || 1)) * 100 : ((kpi.actual || 0) / (kpi.target || 1)) * 100;
+      if (score >= 100) kpi.status = 'Exceeded';
+      else if (score >= 80) kpi.status = 'On-Track';
+      else kpi.status = 'At Risk';
+      persistKpiData();
+      document.querySelector('#updateKpiDialog')?.close();
+      openModule('kpi');
+      showToast(`Capaian "${kpi.title}" diperbarui menjadi ${actual} ${kpi.unit} (${Math.round(score)}%).`);
+    }
+    return;
+  }
+
+  // 6. Edit KPI Form
+  if (form.id === 'editKpiForm') {
+    event.preventDefault();
+    const data = new FormData(form);
+    const id = data.get('kpiId');
+    const kpi = kpiData.find(k => k.id === id);
+    if (kpi) {
+      kpi.title = (data.get('title') || '').trim() || kpi.title;
+      kpi.dept = data.get('dept') || kpi.dept;
+      kpi.pic = (data.get('pic') || '').trim() || kpi.pic;
+      kpi.target = Number(data.get('target')) || kpi.target;
+      kpi.actual = Number(data.get('actual')) || kpi.actual;
+      kpi.unit = (data.get('unit') || '%').trim();
+      kpi.weight = Number(data.get('weight')) || kpi.weight;
+      kpi.period = data.get('period') || kpi.period;
+      kpi.lowerIsBetter = data.get('lowerIsBetter') === 'true';
+      kpi.notes = (data.get('notes') || '').trim();
+
+      let score = kpi.lowerIsBetter ? (kpi.target / (kpi.actual || 1)) * 100 : ((kpi.actual || 0) / (kpi.target || 1)) * 100;
+      if (score >= 100) kpi.status = 'Exceeded';
+      else if (score >= 80) kpi.status = 'On-Track';
+      else kpi.status = 'At Risk';
+
+      persistKpiData();
+      document.querySelector('#editKpiDialog')?.close();
+      openModule('kpi');
+      showToast(`Parameter KPI "${kpi.title}" berhasil diperbarui.`);
+    }
+    return;
+  }
+
+  // 7. Division Form
+  if (form.id === 'divisionForm') {
+    event.preventDefault();
+    const data = new FormData(form);
+    const name = (data.get('name') || '').trim();
+    const code = (data.get('code') || '').trim().toUpperCase();
+    const head = (data.get('head') || '').trim();
+    const budget = (data.get('budget') || 'Rp 50.000.000').trim();
+    const description = (data.get('description') || '').trim();
+
+    if (!name || !code) return;
+    const newDept = { id: `dept-${Date.now()}`, name, code, head, budget, description };
+    departmentsData.push(newDept);
+    persistDepartmentsData();
+    form.reset();
+    document.querySelector('#divisionDialog')?.close();
+    openModule('kpi');
+    showToast(`Divisi baru "${name} (${code})" berhasil ditambahkan.`);
+    return;
+  }
+
+  // 8. Edit Division Form
+  if (form.id === 'editDivisionForm') {
+    event.preventDefault();
+    const data = new FormData(form);
+    const id = data.get('deptId');
+    const oldName = data.get('originalName');
+    const name = (data.get('name') || '').trim();
+    const code = (data.get('code') || '').trim().toUpperCase();
+    const head = (data.get('head') || '').trim();
+    const budget = (data.get('budget') || '').trim();
+    const description = (data.get('description') || '').trim();
+
+    const dept = departmentsData.find(d => d.id === id);
+    if (dept) {
+      dept.name = name;
+      dept.code = code;
+      dept.head = head;
+      dept.budget = budget;
+      dept.description = description;
+
+      if (oldName && oldName !== name) {
+        kpiData.forEach(k => { if (k.dept === oldName) k.dept = name; });
+        persistKpiData();
+        employeeData.forEach(p => { if (p[2] === oldName) p[2] = name; });
+        persistEmployeeData();
+        userAccounts.forEach(u => { if (u.department === oldName) u.department = name; });
+        persistUserAccounts();
+      }
+
+      persistDepartmentsData();
+      document.querySelector('#editDivisionDialog')?.close();
+      openModule('kpi');
+      showToast(`Data divisi "${name}" berhasil disimpan.`);
+    }
+    return;
+  }
+
+  // 9. User Account Form
+  if (form.id === 'userAccountForm') {
+    event.preventDefault();
+    const data = new FormData(form);
+    const name = (data.get('name') || '').trim();
+    const email = (data.get('email') || '').trim();
+    const role = data.get('role') || 'Supervisor';
+    const department = data.get('department') || (departmentsData[0]?.name || 'Human Resources');
+    const title = (data.get('title') || '').trim() || `${role} ${department}`;
+
+    if (!name || !email) return;
+    const newAcct = {
+      id: `usr-${Date.now()}`,
+      name,
+      email,
+      role,
+      department,
+      title,
+      status: 'Active',
+      lastLogin: 'Baru saja',
+      avatar: 'men/45'
+    };
+    userAccounts.push(newAcct);
+    persistUserAccounts();
+
+    const empExists = employeeData.some(p => p[0].toLowerCase() === name.toLowerCase());
+    if (!empExists) {
+      employeeData.push([name, email, department, title || role, 'On-Time']);
+      getEmployeeId(name);
+      persistEmployeeData();
+    }
+
+    form.reset();
+    document.querySelector('#userAccountDialog')?.close();
+    openModule('kpi');
+    showToast(`Akun pengguna untuk ${name} (${role}) berhasil dibuat.`);
+    return;
+  }
+
+  // 10. Edit User Account Form
+  if (form.id === 'editUserAccountForm') {
+    event.preventDefault();
+    const data = new FormData(form);
+    const id = data.get('userId');
+    const name = (data.get('name') || '').trim();
+    const email = (data.get('email') || '').trim();
+    const role = data.get('role') || 'Supervisor';
+    const department = data.get('department') || 'Human Resources';
+    const title = (data.get('title') || '').trim();
+    const status = data.get('status') || 'Active';
+
+    const acct = userAccounts.find(u => u.id === id);
+    if (acct) {
+      acct.name = name;
+      acct.email = email;
+      acct.role = role;
+      acct.department = department;
+      acct.title = title;
+      acct.status = status;
+      persistUserAccounts();
+      document.querySelector('#editUserAccountDialog')?.close();
+      openModule('kpi');
+      showToast(`Akun ${name} berhasil diperbarui.`);
+    }
+    return;
+  }
+});
+
+
 /* ==========================================================================
    Initial Application Launch
    ========================================================================== */
@@ -4717,6 +5223,7 @@ function setupDashboardControls() {
 document.addEventListener('DOMContentLoaded', () => {
   renderDashboardMiniCalendar();
   renderDashboardScheduleList();
+  renderDashboardSummary();
   updateNotificationBadge();
   setupDashboardControls();
   const { key, params } = resolveRoute();

@@ -270,6 +270,9 @@ const server = http.createServer(async (req, res) => {
       if (body.leave && Array.isArray(body.leave)) {
         db.leaveRequests = body.leave;
       }
+      if (body.applicants && Array.isArray(body.applicants)) {
+        db.applicants = body.applicants;
+      }
       writeDb(db);
       return sendJson(res, 200, {
         ok: true,

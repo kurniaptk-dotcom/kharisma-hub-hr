@@ -88,6 +88,196 @@
       </div>
 <div class="dialog-actions"><button type="button" class="module-button secondary" data-close-settings>Batal</button><button type="submit" class="module-button primary">Simpan Pengaturan</button></div></form></dialog>
 
+    
+    <!-- Add New KPI Dialog -->
+    <dialog class="record-dialog" id="kpiDialog">
+      <form id="kpiForm">
+        <div class="module-dialog-head">
+          <div><span class="module-eyebrow">MANAJEMEN TARGET</span><h2>Tambah Indikator KPI Baru</h2></div>
+          <button type="button" class="dialog-close" data-close-kpi-dialog aria-label="Close">&times;</button>
+        </div>
+        <label>Nama Indikator KPI<input name="title" required placeholder="mis. Customer Satisfaction Score (CSAT) > 90%" /></label>
+        <div class="dialog-two">
+          <label>Departemen / Divisi<select name="dept" id="kpiFormDeptSelect" required></select></label>
+          <label>Penanggung Jawab (PIC)<input name="pic" required placeholder="mis. Olivia Mason" /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Nilai Target<input name="target" type="number" step="any" required placeholder="mis. 90" /></label>
+          <label>Satuan Target<input name="unit" required placeholder="mis. %, Leads, Skor, Hari" /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Bobot Penilaian (%)<input name="weight" type="number" min="1" max="100" required placeholder="mis. 25" /></label>
+          <label>Periode Target<select name="period"><option>Q4 2026</option><option>Q3 2026</option><option>Semester 2 2026</option><option>Tahun 2026</option><option>Q1 2027</option></select></label>
+        </div>
+        <label>Arah Penilaian<select name="lowerIsBetter"><option value="false">Makin Tinggi Makin Baik (Pertumbuhan / Hasil)</option><option value="true">Makin Rendah Makin Baik (Efisiensi Waktu / Biaya)</option></select></label>
+        <div class="dialog-actions">
+          <button type="button" class="module-button secondary" data-close-kpi-dialog>Batal</button>
+          <button type="submit" class="module-button primary">Tambah KPI</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Update KPI Progress Dialog -->
+    <dialog class="record-dialog" id="updateKpiDialog">
+      <form id="updateKpiForm">
+        <input type="hidden" name="kpiId" id="updateKpiId" />
+        <div class="module-dialog-head">
+          <div><span class="module-eyebrow">PENCATATAN CAPAIAN</span><h2>Update Realisasi KPI</h2></div>
+          <button type="button" class="dialog-close" data-close-update-kpi-dialog aria-label="Close">&times;</button>
+        </div>
+        <p style="margin:0 0 12px;font-size:13px;color:#475569" id="updateKpiTitleBanner"></p>
+        <div class="dialog-two">
+          <label>Nilai Target<input id="updateKpiTargetDisplay" readonly style="background:#f1f5f9;color:#64748b" /></label>
+          <label>Realisasi Terkini<input name="actual" id="updateKpiActual" type="number" step="any" required placeholder="Masukkan capaian aktual" /></label>
+        </div>
+        <label>Catatan Progres &amp; Evaluasi<textarea name="notes" rows="2" placeholder="Tuliskan catatan kemajuan atau kendala pencapaian KPI..."></textarea></label>
+        <div class="dialog-actions">
+          <button type="button" class="module-button secondary" data-close-update-kpi-dialog>Batal</button>
+          <button type="submit" class="module-button primary">Simpan Capaian</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Full Edit KPI Modal -->
+    <dialog class="record-dialog" id="editKpiDialog">
+      <form id="editKpiForm">
+        <input type="hidden" name="kpiId" id="editKpiId" />
+        <div class="module-dialog-head">
+          <div><span class="module-eyebrow">PENGATURAN TARGET</span><h2>Edit Indikator KPI</h2></div>
+          <button type="button" class="dialog-close" data-close-edit-kpi-dialog aria-label="Close">&times;</button>
+        </div>
+        <label>Nama Indikator KPI<input name="title" id="editKpiTitle" required /></label>
+        <div class="dialog-two">
+          <label>Departemen / Divisi<select name="dept" id="editKpiDept" required></select></label>
+          <label>Penanggung Jawab (PIC)<input name="pic" id="editKpiPic" required /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Nilai Target<input name="target" id="editKpiTarget" type="number" step="any" required /></label>
+          <label>Satuan Target<input name="unit" id="editKpiUnit" required /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Realisasi Aktual Saat Ini<input name="actual" id="editKpiActualField" type="number" step="any" required /></label>
+          <label>Bobot Penilaian (%)<input name="weight" id="editKpiWeight" type="number" min="1" max="100" required /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Periode Target<select name="period" id="editKpiPeriod"><option>Q2 2035</option><option>Q3 2035</option><option>Semester 1 2035</option><option>Tahun 2035</option></select></label>
+          <label>Arah Penilaian<select name="lowerIsBetter" id="editKpiDirection"><option value="false">Makin Tinggi Makin Baik (Pertumbuhan / Hasil)</option><option value="true">Makin Rendah Makin Baik (Efisiensi Waktu / Biaya)</option></select></label>
+        </div>
+        <label>Catatan Progres &amp; Evaluasi<textarea name="notes" id="editKpiNotes" rows="2"></textarea></label>
+        <div class="dialog-actions">
+          <button type="button" class="module-button secondary" data-close-edit-kpi-dialog>Batal</button>
+          <button type="submit" class="module-button primary">Simpan Perubahan KPI</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Add New Division Modal -->
+    <dialog class="record-dialog" id="divisionDialog">
+      <form id="divisionForm">
+        <div class="module-dialog-head">
+          <div><span class="module-eyebrow">STRUKTUR ORGANISASI</span><h2>Tambah Divisi Baru</h2></div>
+          <button type="button" class="dialog-close" data-close-division-dialog aria-label="Close">&times;</button>
+        </div>
+        <div class="dialog-two">
+          <label>Nama Divisi<input name="name" required placeholder="mis. Information Technology" /></label>
+          <label>Kode / Singkatan<input name="code" required placeholder="mis. IT" maxlength="6" style="text-transform:uppercase" /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Kepala Divisi (PIC Lead)<input name="head" required placeholder="mis. Bagus Pratama" /></label>
+          <label>Alokasi Anggaran (Opsional)<input name="budget" placeholder="mis. Rp 50.000.000" /></label>
+        </div>
+        <label>Deskripsi &amp; Cakupan Tanggung Jawab<textarea name="description" rows="2" placeholder="Jelaskan peran dan fungsi utama divisi ini..."></textarea></label>
+        <div class="dialog-actions">
+          <button type="button" class="module-button secondary" data-close-division-dialog>Batal</button>
+          <button type="submit" class="module-button primary">Simpan Divisi</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Edit Division Modal -->
+    <dialog class="record-dialog" id="editDivisionDialog">
+      <form id="editDivisionForm">
+        <input type="hidden" name="deptId" id="editDeptId" />
+        <input type="hidden" name="originalName" id="editDeptOriginalName" />
+        <div class="module-dialog-head">
+          <div><span class="module-eyebrow">STRUKTUR ORGANISASI</span><h2>Ubah Data Divisi</h2></div>
+          <button type="button" class="dialog-close" data-close-edit-division-dialog aria-label="Close">&times;</button>
+        </div>
+        <div class="dialog-two">
+          <label>Nama Divisi<input name="name" id="editDeptName" required /></label>
+          <label>Kode / Singkatan<input name="code" id="editDeptCode" required maxlength="6" style="text-transform:uppercase" /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Kepala Divisi (PIC Lead)<input name="head" id="editDeptHead" required /></label>
+          <label>Alokasi Anggaran<input name="budget" id="editDeptBudget" /></label>
+        </div>
+        <label>Deskripsi &amp; Cakupan Tanggung Jawab<textarea name="description" id="editDeptDescription" rows="2"></textarea></label>
+        <div class="dialog-actions">
+          <button type="button" class="module-button secondary" data-close-edit-division-dialog>Batal</button>
+          <button type="submit" class="module-button primary">Simpan Perubahan</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Add New User Account Modal -->
+    <dialog class="record-dialog" id="userAccountDialog">
+      <form id="userAccountForm">
+        <div class="module-dialog-head">
+          <div><span class="module-eyebrow">MANAJEMEN PENGGUNA</span><h2>Tambah Akun Pengguna Baru</h2></div>
+          <button type="button" class="dialog-close" data-close-user-dialog aria-label="Close">&times;</button>
+        </div>
+        <div class="dialog-two">
+          <label>Nama Lengkap<input name="name" required placeholder="mis. Sari Dewi" /></label>
+          <label>Email Kantor<input name="email" type="email" required placeholder="nama@kharismahub.com" /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Role / Peran<select name="role">
+            <option value="Supervisor">Supervisor Divisi</option>
+            <option value="Admin">Administrator</option>
+          </select></label>
+          <label>Departemen yang Dikelola<select name="department" id="userAcctDept" required></select></label>
+        </div>
+        <label>Jabatan<input name="title" placeholder="mis. Marketing Team Lead" /></label>
+        <div class="dialog-actions">
+          <button type="button" class="module-button secondary" data-close-user-dialog>Batal</button>
+          <button type="submit" class="module-button primary">Tambah Akun</button>
+        </div>
+      </form>
+    </dialog>
+
+    <!-- Edit User Account Modal -->
+    <dialog class="record-dialog" id="editUserAccountDialog">
+      <form id="editUserAccountForm">
+        <input type="hidden" name="userId" id="editUserAcctId" />
+        <div class="module-dialog-head">
+          <div><span class="module-eyebrow">MANAJEMEN PENGGUNA</span><h2>Ubah Data Akun Pengguna</h2></div>
+          <button type="button" class="dialog-close" data-close-edit-user-dialog aria-label="Close">&times;</button>
+        </div>
+        <div class="dialog-two">
+          <label>Nama Lengkap<input name="name" id="editUserAcctName" required /></label>
+          <label>Email Kantor<input name="email" id="editUserAcctEmail" type="email" required /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Role / Peran<select name="role" id="editUserAcctRole">
+            <option value="Supervisor">Supervisor Divisi</option>
+            <option value="Admin">Administrator</option>
+          </select></label>
+          <label>Departemen<select name="department" id="editUserAcctDept" required></select></label>
+        </div>
+        <div class="dialog-two">
+          <label>Jabatan<input name="title" id="editUserAcctTitle" /></label>
+          <label>Status Akun<select name="status" id="editUserAcctStatus">
+            <option value="Active">Aktif</option>
+            <option value="Inactive">Nonaktif</option>
+          </select></label>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="module-button secondary" data-close-edit-user-dialog>Batal</button>
+          <button type="submit" class="module-button primary">Simpan Perubahan</button>
+        </div>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./supabaseClient.js"></script>

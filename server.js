@@ -231,6 +231,53 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    // 6. Calendar API
+    if (pathname === '/api/calendar') {
+      if (req.method === 'GET') {
+        return sendJson(res, 200, { data: db.calendarEvents || [] });
+      }
+      if (req.method === 'POST') {
+        const body = await readBody(req);
+        const newEv = {
+          id: body.id || `cal-${Date.now().toString().slice(-4)}`,
+          day: Number(body.day || 1),
+          date: body.date || '2035-06-01',
+          title: body.title || 'Agenda Baru',
+          time: body.time || '09:00 - 10:00 WIB',
+          location: body.location || 'Kantor Utama',
+          category: body.category || 'General',
+          tone: Number(body.tone || 0)
+        };
+        db.calendarEvents = db.calendarEvents || [];
+        db.calendarEvents.push(newEv);
+        writeDb(db);
+        return sendJson(res, 201, { data: newEv });
+      }
+    }
+
+    // 7. Bulk Sync API
+    if (pathname === '/api/sync' && req.method === 'POST') {
+      const body = await readBody(req);
+      if (body.employees && Array.isArray(body.employees)) {
+        db.employees = body.employees;
+      }
+      if (body.kpis && Array.isArray(body.kpis)) {
+        db.kpis = body.kpis;
+      }
+      if (body.calendar && Array.isArray(body.calendar)) {
+        db.calendarEvents = body.calendar;
+      }
+      if (body.leave && Array.isArray(body.leave)) {
+        db.leaveRequests = body.leave;
+      }
+      writeDb(db);
+      return sendJson(res, 200, {
+        ok: true,
+        message: 'Data lokal berhasil disinkronkan',
+        timestamp: new Date().toISOString()
+      });
+    }
+
     return sendJson(res, 404, { error: 'API route not found' });
   }
 

@@ -2722,64 +2722,63 @@ document.querySelector('#settingsForm')?.addEventListener('submit', (e) => {
   }
   document.querySelector('#settingsDialog')?.close();
   showToast('Pengaturan ruang kerja berhasil disimpan.');
+});
 
-  // Cloud Badge click -> open settings
-  document.querySelector('#cloudStatusBadge')?.addEventListener('click', () => {
-    document.querySelector('#settingsButton')?.click();
+// Cloud Badge click -> open settings
+document.querySelector('#cloudStatusBadge')?.addEventListener('click', () => {
+  document.querySelector('#settingsButton')?.click();
+});
+
+// Supabase Status Listener
+window.addEventListener('kharisma:supabase-status', (e) => {
+  const { isConnected, message } = e.detail;
+  const badge = document.querySelector('#cloudStatusBadge');
+  const text = document.querySelector('#cloudStatusText');
+  const help = document.querySelector('#supabaseStatusHelp');
+
+  if (badge && text) {
+    badge.className = `cloud-badge ${isConnected ? 'connected' : 'local'}`;
+    text.textContent = isConnected ? 'Cloud Aktif' : 'Mode Lokal';
+    badge.title = isConnected ? `Supabase Cloud Aktif: ${message}` : 'Mode Lokal — Klik untuk menyambungkan Supabase';
+  }
+  if (help) {
+    help.textContent = `Status: ${message}`;
+    help.style.color = isConnected ? '#059669' : '#d97706';
+  }
+});
+
+// Test Supabase Connection Button
+document.querySelector('#btnTestSupabase')?.addEventListener('click', async () => {
+  const inputKey = document.querySelector('#settingSupabaseAnonKey')?.value;
+  if (inputKey && window.KharismaDB) {
+    window.KharismaDB.setKey(inputKey);
+  }
+  if (!window.KharismaDB) return;
+  showToast('Menguji koneksi ke Supabase Cloud...');
+  const res = await window.KharismaDB.testConnection();
+  if (res.ok) {
+    showToast(`Sukses: Terhubung ke Supabase (${res.latency || 0}ms)`);
+  } else {
+    showToast(`Gagal: ${res.message}`);
+  }
+});
+
+// Bulk Sync to Supabase Button
+document.querySelector('#btnSyncSupabase')?.addEventListener('click', async () => {
+  if (!window.KharismaDB) return;
+  showToast('Memulai sinkronisasi data ke Supabase...');
+  const res = await window.KharismaDB.syncAll({
+    employees: employeeData,
+    kpis: kpiData,
+    calendar: calendarItems,
+    leave: leaveRequests,
+    getEmployeeId
   });
-
-  // Supabase Status Listener
-  window.addEventListener('kharisma:supabase-status', (e) => {
-    const { isConnected, message } = e.detail;
-    const badge = document.querySelector('#cloudStatusBadge');
-    const text = document.querySelector('#cloudStatusText');
-    const help = document.querySelector('#supabaseStatusHelp');
-
-    if (badge && text) {
-      badge.className = `cloud-badge ${isConnected ? 'connected' : 'local'}`;
-      text.textContent = isConnected ? 'Cloud Aktif' : 'Mode Lokal';
-      badge.title = isConnected ? `Supabase Cloud Aktif: ${message}` : 'Mode Lokal — Klik untuk menyambungkan Supabase';
-    }
-    if (help) {
-      help.textContent = `Status: ${message}`;
-      help.style.color = isConnected ? '#059669' : '#d97706';
-    }
-  });
-
-  // Test Supabase Connection Button
-  document.querySelector('#btnTestSupabase')?.addEventListener('click', async () => {
-    const inputKey = document.querySelector('#settingSupabaseAnonKey')?.value;
-    if (inputKey && window.KharismaDB) {
-      window.KharismaDB.setKey(inputKey);
-    }
-    if (!window.KharismaDB) return;
-    showToast('Menguji koneksi ke Supabase Cloud...');
-    const res = await window.KharismaDB.testConnection();
-    if (res.ok) {
-      showToast(`Sukses: Terhubung ke Supabase (${res.latency || 0}ms)`);
-    } else {
-      showToast(`Gagal: ${res.message}`);
-    }
-  });
-
-  // Bulk Sync to Supabase Button
-  document.querySelector('#btnSyncSupabase')?.addEventListener('click', async () => {
-    if (!window.KharismaDB) return;
-    showToast('Memulai sinkronisasi data ke Supabase...');
-    const res = await window.KharismaDB.syncAll({
-      employees: employeeData,
-      kpis: kpiData,
-      calendar: calendarItems,
-      leave: leaveRequests,
-      getEmployeeId
-    });
-    if (res.ok) {
-      showToast(`Sinkronisasi Berhasil: ${res.results.employees} karyawan, ${res.results.kpi} KPI, ${res.results.calendar} jadwal disinkronkan.`);
-    } else {
-      showToast(`Sinkronisasi tertunda: ${res.message}`);
-    }
-  });
-
+  if (res.ok) {
+    showToast(`Sinkronisasi Berhasil: ${res.results.employees} karyawan, ${res.results.kpi} KPI, ${res.results.calendar} jadwal disinkronkan.`);
+  } else {
+    showToast(`Sinkronisasi tertunda: ${res.message}`);
+  }
 });
 
 document.querySelector('#profileButton')?.addEventListener('click', () => {

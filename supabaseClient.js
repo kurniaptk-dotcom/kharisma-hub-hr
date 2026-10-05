@@ -37,7 +37,10 @@
         testConnection();
       } catch (err) {
         console.warn('[KharismaDB] Supabase initialization warning:', err.message);
+        dispatchStatus(false, 'Gagal inisialisasi client Supabase');
       }
+    } else {
+      dispatchStatus(false, 'Anon Key belum dikonfigurasi (Mode Lokal)');
     }
     return client;
   }

@@ -1,0 +1,20 @@
+{
+  "name": "kharisma-hub-hr",
+  "version": "1.0.0",
+  "description": "Kharisma Hub — Sistem Manajemen SDM & HR Enterprise Terintegrasi",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": [
+    "hr",
+    "management",
+    "dashboard",
+    "attendance",
+    "payroll",
+    "supabase"
+  ],
+  "author": "Kharisma Group",
+  "license": "MIT"
+}

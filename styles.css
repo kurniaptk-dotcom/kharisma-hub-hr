@@ -2046,3 +2046,54 @@ body.theme-dark .role-guide-icon.supervisor-icon{background:linear-gradient(135d
   opacity: 1;
   stroke: #0962ea;
 }
+
+/* Cloud Sync Status Badge */
+.cloud-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  height: 32px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  user-select: none;
+}
+.cloud-badge:hover {
+  background: #e2e8f0;
+}
+.cloud-badge.connected {
+  background: #ecfdf5;
+  color: #059669;
+  border-color: #a7f3d0;
+}
+.cloud-badge.syncing {
+  background: #eff6ff;
+  color: #2563eb;
+  border-color: #bfdbfe;
+}
+.cloud-badge.local {
+  background: #f8fafc;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+.cloud-badge svg {
+  stroke: currentColor;
+  flex-shrink: 0;
+}
+body.theme-dark .cloud-badge {
+  background: #1e293b;
+  color: #94a3b8;
+  border-color: #334155;
+}
+body.theme-dark .cloud-badge.connected {
+  background: #064e3b;
+  color: #34d399;
+  border-color: #059669;
+}

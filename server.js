@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 const PUBLIC_DIR = __dirname;
 const DATA_DIR = path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'db.json');
@@ -84,7 +85,6 @@ const MIME_TYPES = {
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
   });
@@ -105,11 +105,104 @@ function readBody(req) {
   });
 }
 
+async function handleLocalUserApi(req, res) {
+  const projectUrl = process.env.SUPABASE_URL || 'https://wirgqezinegebauddmgy.supabase.co';
+  const anonKey = process.env.SUPABASE_ANON_KEY || '';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!anonKey || !serviceKey) return sendJson(res, 503, { error: 'Konfigurasi server memerlukan SUPABASE_ANON_KEY dan SUPABASE_SERVICE_ROLE_KEY.' });
+  if (!token) return sendJson(res, 401, { error: 'Sesi login tidak valid.' });
+
+  try {
+    const authResponse = await fetch(`${projectUrl}/auth/v1/user`, { headers: { apikey: anonKey, Authorization: `Bearer ${token}` } });
+    if (!authResponse.ok) return sendJson(res, 401, { error: 'Sesi login kedaluwarsa atau tidak valid.' });
+    const user = await authResponse.json();
+    const serviceFetch = (route, options = {}) => fetch(`${projectUrl}${route}`, {
+      ...options,
+      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, 'Content-Type': 'application/json', ...options.headers }
+    });
+    const profileResponse = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(user.id)}&select=role,status`);
+    const [profile] = await profileResponse.json();
+    if (!profile || profile.status !== 'Active') return sendJson(res, 403, { error: 'Profil akun tidak aktif.' });
+    if (profile.role !== 'Admin') return sendJson(res, 403, { error: 'Hanya administrator yang dapat mengelola akun.' });
+
+    if (req.method === 'GET') {
+      const response = await serviceFetch('/rest/v1/user_profiles?select=id,email,full_name,role,department,title,status,created_at&order=created_at.asc');
+      const data = await response.json();
+      return sendJson(res, response.status, response.ok ? { data } : { error: data.message || 'Gagal memuat akun.' });
+    }
+    const body = await readBody(req);
+    if (req.method === 'POST') {
+      const name = String(body.name || '').trim();
+      const email = String(body.email || '').trim().toLowerCase();
+      if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !['Admin', 'Supervisor'].includes(body.role)) return sendJson(res, 400, { error: 'Nama, email valid, dan role wajib diisi.' });
+      const invited = await serviceFetch('/auth/v1/invite', { method: 'POST', body: JSON.stringify({ email, data: { full_name: name } }) });
+      const authUser = await invited.json();
+      if (!invited.ok || !authUser.id) return sendJson(res, invited.status || 502, { error: authUser.message || authUser.msg || 'Undangan gagal dikirim.' });
+      const saved = await serviceFetch('/rest/v1/user_profiles?on_conflict=id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify({ id: authUser.id, email, full_name: name, role: body.role, department: body.department || '', title: body.title || body.role, status: 'Active' }) });
+      const data = await saved.json();
+      return sendJson(res, saved.ok ? 201 : saved.status, saved.ok ? { data: data[0] } : { error: data.message || 'Profil akun gagal dibuat.' });
+    }
+    if (req.method === 'PATCH') {
+      const id = String(body.id || '');
+      if (!id) return sendJson(res, 400, { error: 'ID akun wajib diisi.' });
+      if (id === user.id && (body.role !== 'Admin' || body.status === 'Inactive')) return sendJson(res, 400, { error: 'Anda tidak dapat menurunkan role atau menonaktifkan akun sendiri.' });
+      if (body.role && !['Admin', 'Supervisor'].includes(body.role)) return sendJson(res, 400, { error: 'Role tidak valid.' });
+      if (body.role === 'Supervisor' || body.status === 'Inactive') {
+        const targetResponse = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}&select=role,status`);
+        const [target] = await targetResponse.json();
+        if (target?.role === 'Admin' && target.status === 'Active') {
+          const adminsResponse = await serviceFetch('/rest/v1/user_profiles?select=id&role=eq.Admin&status=eq.Active');
+          const admins = await adminsResponse.json();
+          if (adminsResponse.ok && admins.length <= 1) return sendJson(res, 409, { error: 'Sistem harus memiliki setidaknya satu administrator aktif.' });
+        }
+      }
+      const authUpdate = {};
+      if (body.email !== undefined) { authUpdate.email = String(body.email).trim().toLowerCase(); authUpdate.email_confirm = true; }
+      if (body.name !== undefined) authUpdate.user_metadata = { full_name: String(body.name).trim() };
+      if (Object.keys(authUpdate).length) {
+        const identity = await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(authUpdate) });
+        if (!identity.ok) { const error = await identity.json(); return sendJson(res, identity.status, { error: error.message || 'Identitas login gagal diperbarui.' }); }
+      }
+      const fields = {};
+      if (body.name !== undefined) fields.full_name = String(body.name).trim();
+      if (body.email !== undefined) fields.email = String(body.email).trim().toLowerCase();
+      for (const key of ['role', 'department', 'title', 'status']) if (body[key] !== undefined) fields[key] = body[key];
+      const updated = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(fields) });
+      const data = await updated.json();
+      if (!updated.ok) return sendJson(res, updated.status, { error: data.message || 'Pembaruan akun gagal.' });
+      if (body.status) {
+        const ban = await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ban_duration: body.status === 'Inactive' ? '876000h' : 'none' }) });
+        if (!ban.ok) return sendJson(res, ban.status, { error: 'Profil berubah, tetapi status login gagal diperbarui.' });
+      }
+      return sendJson(res, 200, { data: data[0] || null });
+    }
+    return sendJson(res, 405, { error: 'Method Not Allowed' });
+  } catch {
+    return sendJson(res, 503, { error: 'Layanan Supabase tidak dapat dijangkau.' });
+  }
+}
+
 const server = http.createServer(async (req, res) => {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = decodeURIComponent(parsedUrl.pathname);
+
+  // This JSON-file API is a local demo backend. Restrict it to loopback and
+  // deny cross-origin browser requests so another site cannot read or mutate HR data.
+  if (pathname.startsWith('/api/')) {
+    const remoteAddress = req.socket.remoteAddress || '';
+    const isLoopback = remoteAddress === '::1' || remoteAddress === '127.0.0.1' || remoteAddress.startsWith('::ffff:127.');
+    const origin = req.headers.origin;
+    let sameOrigin = true;
+    if (origin) {
+      try { sameOrigin = new URL(origin).host === req.headers.host; } catch { sameOrigin = false; }
+    }
+    if (!isLoopback || !sameOrigin) return sendJson(res, 403, { error: 'API demo hanya tersedia dari aplikasi lokal.' });
+  }
+
   // CORS Preflight
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
-      'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Requested-With'
     });
@@ -117,14 +210,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-  const pathname = decodeURIComponent(parsedUrl.pathname);
-
   // ==========================================================================
   // REST API ROUTER (/api/*)
   // ==========================================================================
   if (pathname.startsWith('/api/')) {
     const db = readDb();
+
+    if (pathname === '/api/users') return handleLocalUserApi(req, res);
 
     // 1. Health check
     if (pathname === '/api/health') {
@@ -314,7 +406,6 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(200, {
       'Content-Type': contentType,
-      'Access-Control-Allow-Origin': '*',
       'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=3600'
     });
 
@@ -323,7 +414,7 @@ const server = http.createServer(async (req, res) => {
   });
 });
 
-server.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, HOST, () => {
   console.log(`=======================================================`);
   console.log(`🚀 Kharisma Hub HR Management Server is running`);
   console.log(`🌐 Local URL:  http://localhost:${PORT}`);

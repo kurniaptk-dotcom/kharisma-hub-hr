@@ -71,7 +71,8 @@
       isConnected = true;
       lastSyncTime = new Date();
       dispatchStatus(true, `Cloud Terhubung (${latency}ms)`);
-      flushSyncQueue();
+      // Pending HR records are never uploaded automatically after a login or key change.
+      // The administrator must start a deliberate sync from Settings.
       return { ok: true, latency, message: 'Koneksi aktif' };
     } catch (e) {
       isConnected = false;
@@ -104,14 +105,18 @@
       if (!queue.length) return;
       console.log(`[KharismaDB] Flushing ${queue.length} offline operations to Supabase...`);
 
-      const remaining = [];
+      const allowedTables = new Set(['employees', 'kpi_indicators']);
+      const remaining = queue.filter(item => !allowedTables.has(item.table) && item.table !== 'attendance_records');
       for (const item of queue) {
+        if (!allowedTables.has(item.table)) continue;
         try {
+          let result;
           if (item.action === 'insert') {
-            await client.from(item.table).upsert(item.payload);
+            result = await client.from(item.table).upsert(item.payload);
           } else if (item.action === 'delete') {
-            await client.from(item.table).delete().eq('id', item.payload.id);
+            result = await client.from(item.table).delete().eq('id', item.payload.id);
           }
+          if (result?.error) remaining.push(item);
         } catch {
           remaining.push(item);
         }
@@ -133,6 +138,41 @@
     get lastSyncTime() { return lastSyncTime; },
     testConnection,
 
+    auth: {
+      get enabled() { return !!client && !!anonKey; },
+      async getSession() {
+        if (!client) return { session: null, error: new Error('Supabase belum dikonfigurasi') };
+        const { data, error } = await client.auth.getSession();
+        return { session: data?.session || null, error };
+      },
+      async signIn(email, password) {
+        if (!client) return { data: null, error: new Error('Masukkan Supabase anon key di Pengaturan terlebih dahulu.') };
+        return client.auth.signInWithPassword({ email: String(email || '').trim(), password });
+      },
+      async signOut() { return client ? client.auth.signOut() : { error: null }; },
+      async resetPassword(email) {
+        if (!client) return { error: new Error('Supabase belum dikonfigurasi') };
+        return client.auth.resetPasswordForEmail(String(email || '').trim(), { redirectTo: window.location.href.split('#')[0] });
+      },
+      async updatePassword(password) {
+        if (!client) return { error: new Error('Supabase belum dikonfigurasi') };
+        return client.auth.updateUser({ password });
+      },
+      async getProfile(userId) {
+        if (!client || !userId) return { profile: null, error: null };
+        const { data, error } = await client.from('user_profiles').select('*').eq('id', userId).maybeSingle();
+        return { profile: data || null, error };
+      },
+      async updateProfile(values) {
+        if (!client) return { error: new Error('Supabase belum dikonfigurasi') };
+        return client.auth.updateUser({ data: { full_name: values.name } });
+      },
+      onAuthStateChange(callback) {
+        if (!client) return { data: { subscription: { unsubscribe() {} } } };
+        return client.auth.onAuthStateChange(callback);
+      }
+    },
+
     setKey(newKey) {
       anonKey = (newKey || '').trim();
       localStorage.setItem(STORAGE_KEY_ANON, anonKey);
@@ -147,6 +187,10 @@
         try {
           const { data, error } = await client.from('employees').select('*').order('created_at', { ascending: true });
           if (!error && data && data.length) {
+            window.__kharismaEmployeeProfiles = Object.fromEntries(data.map(e => [e.name, {
+              gender: e.gender, birthDate: e.birth_date, phone: e.phone, address: e.address,
+              joinDate: e.join_date, workModel: e.work_model, employmentType: e.employment_type
+            }]));
             return data.map(e => [
               e.name,
               e.email,
@@ -171,6 +215,11 @@
           title: employeeObj.title,
           employment_type: employeeObj.employmentType || 'Full-Time',
           work_model: employeeObj.workModel || 'Hybrid',
+          join_date: employeeObj.joinDate || '12 Jan 2034',
+          gender: employeeObj.gender || 'Not provided',
+          birth_date: employeeObj.birthDate || employeeObj.dateOfBirth || 'Not provided',
+          phone: employeeObj.phone || '+62 812-0000-0000',
+          address: employeeObj.address || 'Indonesia',
           status: employeeObj.status || 'On-Time',
           updated_at: new Date().toISOString()
         };
@@ -179,7 +228,10 @@
           try {
             const { error } = await client.from('employees').upsert(payload);
             if (!error) return { ok: true, data: payload };
-          } catch (e) {}
+            return { ok: false, error: error.message };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
         }
         enqueueSync('insert', 'employees', payload);
         return { ok: true, offline: true, data: payload };
@@ -188,36 +240,113 @@
       async delete(nameOrId) {
         if (client && isConnected) {
           try {
-            await client.from('employees').delete().or(`id.eq.${nameOrId},name.eq.${nameOrId}`);
-          } catch (e) {}
+            const { error } = await client.from('employees').delete().eq('id', nameOrId);
+            if (error) return { ok: false, error: error.message };
+            return { ok: true };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
         }
         enqueueSync('delete', 'employees', { id: nameOrId });
-        return { ok: true };
+        return { ok: true, queued: true };
       }
     },
 
     // --- ATTENDANCE SERVICE ---
     attendance: {
-      async log(record) {
-        const payload = {
-          employee_id: record.id || 'EMP-0001',
-          employee_name: record.name,
-          date: record.date || new Date().toISOString().split('T')[0],
-          work_model: record.workModel || 'Di Kantor',
-          clock_in: record.clockIn || '09:00 AM',
-          clock_out: record.clockOut || null,
-          duration: record.duration || '—',
-          overtime: record.overtime || '—',
-          status: record.status || 'On-Time'
-        };
-
-        if (client && isConnected) {
-          try {
-            await client.from('attendance_records').insert(payload);
-          } catch (e) {}
+      async getAll() {
+        if (!client || !isConnected) return [];
+        const rows = [];
+        for (let offset = 0; offset < 5000; offset += 1000) {
+          const { data, error } = await client.from('attendance_records').select('*').order('date', { ascending: false }).range(offset, offset + 999);
+          if (error) throw error;
+          rows.push(...(data || []));
+          if (!data || data.length < 1000) break;
         }
-        enqueueSync('insert', 'attendance_records', payload);
-        return { ok: true, data: payload };
+        return rows;
+      },
+      async getMine() {
+        if (!client || !isConnected) return { record: null, error: null };
+        const { data: authData } = await client.auth.getSession();
+        const userId = authData?.session?.user?.id;
+        if (!userId) return { record: null, error: null };
+        const dateParts = Object.fromEntries(new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date()).map(part => [part.type, part.value]));
+        const dateKey = `${dateParts.year}-${dateParts.month}-${dateParts.day}`;
+        const yesterday = new Date(`${dateKey}T00:00:00+07:00`); yesterday.setDate(yesterday.getDate() - 1);
+        const fromDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).format(yesterday);
+        const { data: rows, error } = await client.from('attendance_records').select('*').eq('auth_user_id', userId).gte('date', fromDate).order('date', { ascending: false }).limit(3);
+        if (error || !rows?.length) return { record: null, error };
+        const data = rows.find(row => ['working', 'on_break'].includes(row.state)) || rows.find(row => row.date === dateKey);
+        if (!data) return { record: null, error: null };
+        return { record: { employeeId: data.employee_id, name: data.employee_name, dateKey: data.date, date: data.date, workModel: data.work_model, clockIn: data.clock_in, clockOut: data.clock_out || '', clockedIn: !data.clock_out, clockInAt: data.clock_in_at, clockOutAt: data.clock_out_at, duration: data.duration, overtime: data.overtime, lateMinutes: Number(data.late_minutes || 0), status: data.status, state: data.state || (data.clock_out ? 'completed' : 'working'), breakSessions: data.break_sessions || [], shiftId: data.shift_id, location: data.location_verified ? { latitude: data.location_latitude, longitude: data.location_longitude, accuracy: data.location_accuracy_m, distance: data.location_distance_m, verified: true } : null, overtimeApprovalStatus: data.overtime_approval_status || 'not_required' }, error: null };
+      },
+      async getPolicy() {
+        if (!client || !isConnected) return { location: null, shifts: [], assignments: [] };
+        const [locations, shifts, assignments] = await Promise.all([
+          client.from('attendance_office_locations').select('*').eq('enabled', true).order('updated_at', { ascending: false }).limit(1),
+          client.from('attendance_shifts').select('*').eq('enabled', true).order('name'),
+          client.from('attendance_shift_assignments').select('*')
+        ]);
+        const error = locations.error || shifts.error || assignments.error;
+        if (error) throw error;
+        return { location: locations.data?.[0] || null, shifts: shifts.data || [], assignments: assignments.data || [] };
+      },
+      async transition(action, date, location) {
+        if (!client || !isConnected) return { ok: false, offline: true };
+        const { data, error } = await client.rpc('attendance_transition', {
+          p_action: action, p_date: date, p_latitude: location.latitude, p_longitude: location.longitude, p_accuracy_m: location.accuracy || null, p_event_at: location.eventAt || new Date().toISOString()
+        });
+        if (error) throw error;
+        return { ok: true, data };
+      },
+      async saveOfficeLocation(values) {
+        if (!client || !isConnected) throw new Error('Pengaturan lokasi memerlukan koneksi Supabase.');
+        const { data: authData } = await client.auth.getSession();
+        const { data, error } = await client.from('attendance_office_locations').insert({ ...values, enabled: true, updated_by: authData.session?.user?.id }).select().single();
+        if (error) throw error;
+        return data;
+      },
+      async saveShift(values) {
+        if (!client || !isConnected) throw new Error('Pengaturan shift memerlukan koneksi Supabase.');
+        const { data, error } = await client.from('attendance_shifts').upsert(values, { onConflict: 'name' }).select().single();
+        if (error) throw error;
+        return data;
+      },
+      async assignShift(employeeId, shiftId) {
+        if (!client || !isConnected) throw new Error('Penetapan shift memerlukan koneksi Supabase.');
+        const { data: authData } = await client.auth.getSession();
+        const { error } = await client.from('attendance_shift_assignments').upsert({ employee_id: employeeId, shift_id: shiftId, assigned_by: authData.session?.user?.id }, { onConflict: 'employee_id' });
+        if (error) throw error;
+        return { ok: true };
+      },
+      async requestCorrection(attendanceId, requestedValues, reason) {
+        if (!client || !isConnected) throw new Error('Pengajuan koreksi memerlukan koneksi Supabase.');
+        const { data: authData } = await client.auth.getSession();
+        const { data, error } = await client.from('attendance_correction_requests').insert({ attendance_id: attendanceId, requester_id: authData.session.user.id, requested_values: requestedValues, reason }).select().single();
+        if (error) throw error;
+        return data;
+      },
+      async reviewCorrection(id, status, note = '') {
+        if (!client || !isConnected) throw new Error('Persetujuan koreksi memerlukan koneksi Supabase.');
+        const { data, error } = await client.rpc('review_attendance_correction', { p_request_id: id, p_approve: status === 'approved', p_note: note });
+        if (error) throw error;
+        return data;
+      },
+      async reviewOvertime(id, approve) {
+        if (!client || !isConnected) throw new Error('Persetujuan lembur memerlukan koneksi Supabase.');
+        const { data, error } = await client.rpc('review_attendance_overtime', { p_attendance_id: id, p_approve: Boolean(approve) });
+        if (error) throw error;
+        return data;
+      },
+      async getReviewQueue() {
+        if (!client || !isConnected) return { corrections: [], overtime: [] };
+        const [corrections, overtime] = await Promise.all([
+          client.from('attendance_correction_requests').select('*,attendance_records(employee_name,date,employee_id)').eq('status', 'pending').order('created_at'),
+          client.from('attendance_records').select('id,employee_id,employee_name,date,overtime').eq('overtime_approval_status', 'pending').order('date', { ascending: false })
+        ]);
+        const error = corrections.error || overtime.error;
+        if (error) throw error;
+        return { corrections: corrections.data || [], overtime: overtime.data || [] };
       }
     },
 
@@ -322,21 +451,29 @@
 
         if (client && isConnected) {
           try {
-            await client.from('kpi_indicators').upsert(payload);
-          } catch (e) {}
+            const { error } = await client.from('kpi_indicators').upsert(payload);
+            if (error) throw error;
+            return { ok: true, data: payload };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
         }
         enqueueSync('insert', 'kpi_indicators', payload);
-        return { ok: true, data: payload };
+        return { ok: true, offline: true, data: payload };
       },
 
       async delete(id) {
         if (client && isConnected) {
           try {
-            await client.from('kpi_indicators').delete().eq('id', id);
-          } catch (e) {}
+            const { error } = await client.from('kpi_indicators').delete().eq('id', id);
+            if (error) return { ok: false, error: error.message };
+            return { ok: true };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
         }
         enqueueSync('delete', 'kpi_indicators', { id });
-        return { ok: true };
+        return { ok: true, queued: true };
       }
     },
 
@@ -402,10 +539,10 @@
         return { ok: false, message: 'Supabase belum terhubung. Periksa Anon Key di Pengaturan.' };
       }
 
-      const results = { employees: 0, kpi: 0, leave: 0, calendar: 0 };
+      const results = { employees: 0, kpi: 0, attendance: 0 };
       try {
         // 1. Sync Employees
-        if (localState.employees && localState.employees.length) {
+        if (localState.isAdmin && localState.employees && localState.employees.length) {
           const empPayloads = localState.employees.map((p, i) => ({
             id: `EMP-${(localState.getEmployeeId ? localState.getEmployeeId(p) : String(i + 1).padStart(4, '0'))}`,
             name: p[0],
@@ -413,10 +550,12 @@
             department: p[2],
             title: p[3],
             status: p[4] || 'On-Time',
+            ...(window.__kharismaEmployeeProfiles?.[p[0]] ? { gender: window.__kharismaEmployeeProfiles[p[0]].gender, birth_date: window.__kharismaEmployeeProfiles[p[0]].birthDate, phone: window.__kharismaEmployeeProfiles[p[0]].phone, address: window.__kharismaEmployeeProfiles[p[0]].address, join_date: window.__kharismaEmployeeProfiles[p[0]].joinDate, work_model: window.__kharismaEmployeeProfiles[p[0]].workModel, employment_type: window.__kharismaEmployeeProfiles[p[0]].employmentType } : {}),
             updated_at: new Date().toISOString()
           }));
           const { error } = await client.from('employees').upsert(empPayloads);
-          if (!error) results.employees = empPayloads.length;
+          if (error) throw error;
+          results.employees = empPayloads.length;
         }
 
         // 2. Sync KPI
@@ -437,42 +576,11 @@
             updated_at: new Date().toISOString()
           }));
           const { error } = await client.from('kpi_indicators').upsert(kpiPayloads);
-          if (!error) results.kpi = kpiPayloads.length;
+          if (error) throw error;
+          results.kpi = kpiPayloads.length;
         }
 
-        // 3. Sync Calendar
-        if (localState.calendar && localState.calendar.length) {
-          const calPayloads = localState.calendar.map(ev => ({
-            id: ev.id,
-            day: Number(ev.day),
-            date: ev.date || '2035-06-01',
-            title: ev.title,
-            time: ev.time,
-            location: ev.location,
-            category: ev.category,
-            note: ev.note,
-            tone: Number(ev.tone || 0)
-          }));
-          const { error } = await client.from('calendar_events').upsert(calPayloads);
-          if (!error) results.calendar = calPayloads.length;
-        }
-
-        // 4. Sync Leave
-        if (localState.leave && localState.leave.length) {
-          const leavePayloads = localState.leave.map(r => ({
-            id: r.id,
-            employee_name: r.name,
-            title: r.title,
-            type: r.type,
-            submit_date: r.submitDate,
-            period: r.period,
-            duration: r.duration,
-            reason: r.reason,
-            status: r.status
-          }));
-          const { error } = await client.from('leave_requests').upsert(leavePayloads);
-          if (!error) results.leave = leavePayloads.length;
-        }
+        await flushSyncQueue();
 
         lastSyncTime = new Date();
         dispatchStatus(true, `Sinkronisasi selesai pada ${lastSyncTime.toLocaleTimeString('id-ID')}`);
@@ -492,6 +600,22 @@
       init: initClient,
       setKey: KharismaDB.setKey,
       get isConnected() { return isConnected; }
+    };
+
+    window.KharismaAuth = {
+      get session() { return window.__kharismaSession || null; },
+      async adminRequest(method, body = {}) {
+        const { session } = await KharismaDB.auth.getSession();
+        if (!session) throw new Error('Sesi login tidak ditemukan.');
+        const response = await fetch('/api/users', {
+          method,
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: method === 'GET' ? undefined : JSON.stringify(body)
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(result.error || 'Permintaan manajemen pengguna gagal.');
+        return result;
+      }
     };
 
     window.addEventListener('DOMContentLoaded', () => {

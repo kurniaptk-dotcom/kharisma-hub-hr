@@ -35,7 +35,156 @@ const safe = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 })[char]);
 
+function calculateKpiScore(kpi) {
+  const target = Number(kpi?.target);
+  const actual = Number(kpi?.actual);
+  if (!Number.isFinite(target) || !Number.isFinite(actual) || target <= 0) return 0;
+  if (kpi.lowerIsBetter) return actual <= target ? 100 : (target / Math.max(actual, Number.EPSILON)) * 100;
+  return (Math.max(0, actual) / target) * 100;
+}
+function refreshKpiStatus(kpi) {
+  const score = calculateKpiScore(kpi);
+  kpi.status = score >= 100 ? 'Exceeded' : score >= 80 ? 'On-Track' : 'At Risk';
+  return score;
+}
+
 const initials = (name) => String(name || '').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
+
+// Supabase Auth gate: demo mode remains available only when no project key is configured.
+let authenticatedSupabaseSession = null;
+let authenticatedUserProfile = null;
+let cloudDataHydrating = false;
+let employeeCloudWriteQueue = Promise.resolve();
+let kpiCloudWriteQueue = Promise.resolve();
+function installSupabaseAuthGate() {
+  if (!window.KharismaDB?.auth) return;
+  const root = document.querySelector('.app-shell');
+  if (!root) return;
+  const gate = document.createElement('section');
+  gate.className = 'auth-gate';
+  gate.hidden = true;
+  gate.innerHTML = `<form class="auth-card" id="supabaseLoginForm"><div class="auth-brand">Kharisma Hub</div><h1>Masuk ke akun Anda</h1><p>Gunakan akun perusahaan yang dikelola administrator.</p><label>Email<input name="email" type="email" autocomplete="username" required /></label><label>Kata sandi<input name="password" type="password" autocomplete="current-password" required minlength="6" /></label><p class="auth-error" id="supabaseLoginError" role="alert"></p><button class="module-button primary" type="submit">Masuk</button><button class="auth-forgot" type="button" id="forgotPasswordButton">Lupa kata sandi?</button><button class="auth-config" type="button" id="changeSupabaseKeyButton">Ubah anon key Supabase</button><small id="supabaseAuthHint"></small></form>`;
+  document.body.append(gate);
+  const setLocked = (locked) => { gate.hidden = !locked; root.inert = locked; };
+  const applySession = async (session) => {
+    authenticatedSupabaseSession = session || null;
+    if (!session) { authenticatedUserProfile = null; setLocked(true); return; }
+    const { profile, error } = await window.KharismaDB.auth.getProfile(session.user.id);
+    if (error || !profile || profile.status === 'Inactive') {
+      document.querySelector('#supabaseLoginError').textContent = 'Profil akun belum dibuat atau dinonaktifkan. Minta administrator menjalankan migrasi Supabase dan mengaktifkan akun.';
+      await window.KharismaDB.auth.signOut();
+      setLocked(true);
+      return;
+    }
+    authenticatedUserProfile = profile;
+    const role = profile.role === 'Admin' ? 'Admin' : 'Supervisor';
+    const account = { id: profile.id, name: profile.full_name || session.user.email, email: session.user.email, role, department: profile.department || '', title: profile.title || role, status: profile.status || 'Active' };
+    userAccounts = [account, ...userAccounts.filter(item => item.id !== account.id)];
+    activeAccountId = account.id;
+    syncActiveProfileFromAccount(true);
+    const profileEmailInput = document.querySelector('#profileInputEmail');
+    if (profileEmailInput) profileEmailInput.readOnly = true;
+    for (const selector of ['#profileInputRole', '#profileInputDept']) {
+      const field = document.querySelector(selector);
+      if (field) field.readOnly = true;
+    }
+    await window.KharismaDB.testConnection();
+    if (window.KharismaDB.isConnected) {
+      const attendance = await window.KharismaDB.attendance.getMine();
+      if (attendance.record) { userAttendanceRecord = attendance.record; persistUserAttendance(false); }
+      try {
+        attendancePolicy = await window.KharismaDB.attendance.getPolicy();
+        writeStoredValue('teamhub.attendancePolicy', attendancePolicy);
+        if (role === 'Admin' || role === 'Supervisor') attendanceReviewQueue = await window.KharismaDB.attendance.getReviewQueue();
+      } catch (error) { console.warn('[Attendance] Policy unavailable:', error.message); }
+      try { await syncAttendanceQueue(); } catch (error) { showToast(`Antrean presensi belum dapat diverifikasi: ${error.message || 'periksa koneksi dan hubungi atasan.'}`); }
+    }
+    if (role === 'Admin') {
+      try {
+        const result = await window.KharismaAuth.adminRequest('GET');
+        userAccounts = (result.data || []).map(item => ({ id: item.id, name: item.full_name, email: item.email || '', role: item.role, department: item.department || '', title: item.title || '', status: item.status, avatar: 'men/32', lastLogin: 'Kelola di Supabase Auth' }));
+        if (!userAccounts.some(item => item.id === account.id)) userAccounts.unshift(account);
+        syncActiveProfileFromAccount();
+      } catch (error) { console.warn('[KharismaAuth] User list unavailable:', error.message); }
+    }
+    setLocked(false);
+    const logout = document.querySelector('#supabaseLogoutButton');
+    if (!logout) {
+      const actions = document.querySelector('#userProfileForm .dialog-actions');
+      if (actions) {
+        const button = document.createElement('button');
+        button.type = 'button'; button.id = 'supabaseLogoutButton'; button.className = 'module-button secondary'; button.textContent = 'Keluar';
+        button.addEventListener('click', async () => { await window.KharismaDB.auth.signOut(); window.location.reload(); });
+        actions.prepend(button);
+      }
+    }
+  };
+  const form = gate.querySelector('form');
+  gate.querySelector('#forgotPasswordButton').addEventListener('click', async () => {
+    const email = form.elements.email.value.trim();
+    const errorEl = gate.querySelector('#supabaseLoginError');
+    if (!email) { errorEl.textContent = 'Masukkan email terlebih dahulu untuk menerima tautan reset.'; return; }
+    const result = await window.KharismaDB.auth.resetPassword(email);
+    errorEl.textContent = result.error ? result.error.message : 'Tautan reset kata sandi dikirim. Periksa kotak masuk email Anda.';
+    if (!result.error) errorEl.classList.add('success');
+  });
+  gate.querySelector('#changeSupabaseKeyButton').addEventListener('click', async () => {
+    const currentKey = localStorage.getItem('kharisma_supabase_anon_key') || '';
+    const nextKey = window.prompt('Masukkan anon/public key Supabase untuk proyek ini:', currentKey);
+    if (nextKey === null) return;
+    await window.KharismaDB.setKey(nextKey.trim());
+    gate.querySelector('#supabaseAuthHint').textContent = 'Konfigurasi diperbarui. Coba masuk kembali.';
+    gate.querySelector('#supabaseLoginError').textContent = '';
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submit = form.querySelector('button[type="submit"]');
+    const errorEl = gate.querySelector('#supabaseLoginError');
+    submit.disabled = true; submit.textContent = 'Memeriksa…'; errorEl.textContent = '';
+    try {
+      const result = await window.KharismaDB.auth.signIn(form.elements.email.value, form.elements.password.value);
+      if (result.error) throw result.error;
+      await applySession(result.data.session);
+      if (!authenticatedSupabaseSession) throw new Error(errorEl.textContent || 'Sesi login tidak dapat dimulai.');
+      form.reset();
+    } catch (error) { errorEl.textContent = error.message || 'Login gagal. Periksa email dan kata sandi.'; }
+    finally { submit.disabled = false; submit.textContent = 'Masuk'; }
+  });
+  if (window.KharismaDB.auth.enabled) {
+    gate.querySelector('#supabaseAuthHint').textContent = 'Mode autentikasi Supabase aktif.';
+    setLocked(true);
+    window.KharismaDB.auth.getSession().then(({ session }) => applySession(session)).catch(() => setLocked(true));
+    window.KharismaDB.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT') { authenticatedSupabaseSession = null; setLocked(true); }
+      else if (event === 'SIGNED_IN' && session) applySession(session);
+      else if (event === 'PASSWORD_RECOVERY') {
+        if (session) applySession(session);
+        const dialog = document.createElement('dialog');
+        dialog.className = 'record-dialog';
+        dialog.innerHTML = `<form id="recoveryPasswordForm"><h2>Atur kata sandi baru</h2><label>Kata sandi baru<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label><label>Ulangi kata sandi<input type="password" name="confirmPassword" required minlength="8" autocomplete="new-password" /></label><p class="auth-error" role="alert"></p><div class="dialog-actions"><button class="module-button primary" type="submit">Simpan kata sandi</button></div></form>`;
+        document.body.append(dialog); dialog.showModal();
+        dialog.querySelector('form').addEventListener('submit', async (submitEvent) => {
+          submitEvent.preventDefault();
+          const data = new FormData(submitEvent.currentTarget);
+          if (data.get('password') !== data.get('confirmPassword')) { dialog.querySelector('.auth-error').textContent = 'Kata sandi tidak sama.'; return; }
+          const result = await window.KharismaDB.auth.updatePassword(data.get('password'));
+          if (result.error) { dialog.querySelector('.auth-error').textContent = result.error.message; return; }
+          dialog.close(); dialog.remove(); showToast('Kata sandi berhasil diperbarui.');
+        });
+      }
+    });
+  } else {
+    gate.querySelector('#supabaseAuthHint').textContent = 'Mode demo lokal aktif. Tambahkan Supabase anon key di Pengaturan untuk mewajibkan login.';
+    window.addEventListener('kharisma:supabase-status', () => {
+      if (!window.KharismaDB.auth.enabled || authenticatedSupabaseSession) return;
+      gate.querySelector('#supabaseAuthHint').textContent = 'Supabase Auth aktif. Silakan masuk dengan akun perusahaan.';
+      setLocked(true);
+      window.KharismaDB.auth.getSession().then(({ session }) => applySession(session)).catch(() => setLocked(true));
+    });
+  }
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installSupabaseAuthGate, { once: true });
+else installSupabaseAuthGate();
 
 function downloadCsv(filename, rows) {
   const csv = rows.map((row) => row.map((cell) => `"${String(cell).replaceAll('"', '""')}"`).join(',')).join('\n');
@@ -73,6 +222,148 @@ let userProfile = readStoredValue('teamhub.userProfile', defaultUserProfile);
 function persistUserProfile() { writeStoredValue('teamhub.userProfile', userProfile); }
 
 let userAttendanceRecord = readStoredValue('teamhub.userAttendance', null);
+let attendanceIncompleteHistory = readStoredValue('teamhub.attendanceIncompleteHistory', []);
+let cloudAttendanceRecords = null;
+let attendancePolicy = readStoredValue('teamhub.attendancePolicy', { location: null, shifts: [], assignments: [] });
+let attendanceReviewQueue = { corrections: [], overtime: [] };
+let attendanceActionPending = false;
+const attendanceSyncQueue = readStoredValue('teamhub.attendanceQueue', []);
+function attendanceTodayKey() {
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+function attendanceTimeLabel(value) {
+  return new Intl.DateTimeFormat('id-ID', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(value));
+}
+function attendanceMinutesOfDay(value) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Jakarta', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(new Date(value)).map(part => [part.type, part.value]));
+  return Number(parts.hour) * 60 + Number(parts.minute);
+}
+function attendanceDistanceMeters(aLat, aLng, bLat, bLng) {
+  const rad = value => value * Math.PI / 180;
+  const dLat = rad(bLat - aLat), dLng = rad(bLng - aLng);
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(aLat)) * Math.cos(rad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 6371000 * 2 * Math.asin(Math.sqrt(a));
+}
+function getAttendanceLocation() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) return reject(new Error('Perangkat ini tidak mendukung lokasi GPS.'));
+    navigator.geolocation.getCurrentPosition(position => resolve({ latitude: position.coords.latitude, longitude: position.coords.longitude, accuracy: position.coords.accuracy }), error => {
+      const messages = { 1: 'Izin lokasi ditolak. Aktifkan izin lokasi lalu coba lagi.', 2: 'Lokasi perangkat belum tersedia. Coba lagi di area terbuka.', 3: 'Pencarian lokasi terlalu lama. Coba lagi.' };
+      reject(new Error(messages[error.code] || 'Lokasi GPS tidak dapat dibaca.'));
+    }, { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+  });
+}
+function attendanceDisplayState(record = userAttendanceRecord) {
+  if (!record) return 'Belum Absen';
+  if (record.state) return ({ working: 'Sedang Bekerja', on_break: 'Sedang Istirahat', completed: 'Selesai' })[record.state] || 'Belum Lengkap';
+  return record.clockOut ? 'Selesai' : 'Sedang Bekerja';
+}
+function isActiveOvernightAttendance(record = userAttendanceRecord) {
+  if (!record || record.state === 'completed' || record.clockOut || !record.dateKey) return false;
+  const shift = attendancePolicy.shifts?.find(item => item.id === record.shiftId);
+  if (!shift || String(shift.end_time).slice(0,5) > String(shift.start_time).slice(0,5)) return false;
+  const start = new Date(`${record.dateKey}T00:00:00Z`), today = new Date(`${attendanceTodayKey()}T00:00:00Z`);
+  const days = Math.floor((today - start) / 86400000);
+  return days >= 0 && days <= 1;
+}
+async function syncAttendanceQueue() {
+  if (!window.KharismaDB?.isConnected || !attendanceSyncQueue.length) return;
+  while (attendanceSyncQueue.length) {
+    const queued = attendanceSyncQueue[0];
+    await window.KharismaDB.attendance.transition(queued.action, queued.date, queued.location);
+    attendanceSyncQueue.shift();
+    writeStoredValue('teamhub.attendanceQueue', attendanceSyncQueue);
+  }
+  const mine = await window.KharismaDB.attendance.getMine();
+  if (mine.record) { userAttendanceRecord = mine.record; persistUserAttendance(false); }
+}
+async function performAttendanceTransition(action) {
+  if (attendanceActionPending) return;
+  const locationPolicy = attendancePolicy.location;
+  if (!locationPolicy) { showToast('Lokasi kantor belum diatur. Hubungi administrator SDM.'); return; }
+  const eventAt = new Date().toISOString();
+  attendanceActionPending = true;
+  const button = moduleView.querySelector(`[data-action="attendance-transition"][data-transition="${action}"]`);
+  if (button) { button.disabled = true; button.textContent = 'Memeriksa lokasi…'; }
+  try {
+    const location = await getAttendanceLocation();
+    const distance = attendanceDistanceMeters(Number(locationPolicy.latitude), Number(locationPolicy.longitude), location.latitude, location.longitude);
+    if (distance > Number(locationPolicy.radius_m || locationPolicy.radiusM || 0)) {
+      throw new Error(`Anda berada ${Math.round(distance)} m dari kantor, di luar radius ${locationPolicy.radius_m || locationPolicy.radiusM} m. Mendekat ke kantor lalu coba lagi.`);
+    }
+    location.distance = distance;
+    location.verified = true;
+    location.eventAt = eventAt;
+    const date = action === 'clock_in' ? attendanceTodayKey() : (userAttendanceRecord?.dateKey || attendanceTodayKey());
+    if (window.KharismaDB?.isConnected && authenticatedSupabaseSession) {
+      const result = await window.KharismaDB.attendance.transition(action, date, location);
+      const row = Array.isArray(result.data) ? result.data[0] : result.data;
+      if (!row?.id) throw new Error('Server tidak mengembalikan catatan presensi. Muat ulang aplikasi sebelum mencoba lagi.');
+      userAttendanceRecord = { id: row.id, employeeId: row.employee_id, name: row.employee_name, dateKey: row.date, date: row.date, workModel: row.work_model, clockIn: row.clock_in, clockOut: row.clock_out || '', clockInAt: row.clock_in_at, clockOutAt: row.clock_out_at, duration: row.duration, overtime: row.overtime, lateMinutes: row.late_minutes, status: row.status, state: row.state, breakSessions: row.break_sessions || [], shiftId: row.shift_id, overtimeApprovalStatus: row.overtime_approval_status, location: { latitude: row.location_latitude, longitude: row.location_longitude, accuracy: row.location_accuracy_m, distance: row.location_distance_m, verified: Boolean(row.location_verified) } };
+    } else {
+      const current = userAttendanceRecord?.dateKey === date ? userAttendanceRecord : null;
+      const activeEmployee = employeeData.find(row => row[1]?.toLowerCase() === userProfile.email.toLowerCase()) || findEmployeeByName(userProfile.name);
+      const employeeCode = activeEmployee ? `EMP-${getEmployeeId(activeEmployee)}` : '';
+      if (!employeeCode) throw new Error('Akun belum ditautkan ke data karyawan. Hubungi administrator SDM.');
+      const assignment = attendancePolicy.assignments?.find(item => item.employee_id === employeeCode);
+      const shift = attendancePolicy.shifts?.find(item => item.id === assignment?.shift_id);
+      if (!shift) throw new Error('Shift kerja belum ditetapkan untuk Anda. Hubungi atasan.');
+      const now = new Date(eventAt);
+      if (action === 'clock_in') {
+        if (current) throw new Error('Presensi masuk hari ini sudah tercatat.');
+        const [sh, sm] = String(shift.start_time).slice(0, 5).split(':').map(Number);
+        const lateMinutes = Math.max(0, attendanceMinutesOfDay(now) - (sh * 60 + sm + Number(shift.tolerance_minutes || 0)));
+        userAttendanceRecord = { employeeId: employeeCode, name: userProfile.name, dateKey: date, date, workModel: activeEmployee ? (employeeProfileOverrides[activeEmployee[0]]?.workModel || 'Kantor') : 'Kantor', clockInAt: now.toISOString(), clockIn: attendanceTimeLabel(now), clockOut: '', state: 'working', clockedIn: true, breakSessions: [], shiftId: shift.id, lateMinutes, status: lateMinutes ? 'Late' : 'On-Time', duration: 'Sedang Berjalan', overtime: '—', location };
+      } else {
+        if (!current) throw new Error('Catat presensi masuk terlebih dahulu.');
+        const sessions = current.breakSessions || [];
+        if (action === 'break_start') {
+          if (current.state !== 'working' && current.state !== undefined) throw new Error('Istirahat hanya dapat dimulai saat sedang bekerja.');
+          sessions.push({ start: now.toISOString(), end: null }); current.state = 'on_break';
+        } else if (action === 'break_end') {
+          if (current.state !== 'on_break') throw new Error('Tidak ada istirahat yang sedang berlangsung.');
+          sessions[sessions.length - 1].end = now.toISOString(); current.state = 'working';
+        } else if (action === 'clock_out') {
+          if (current.state === 'on_break') throw new Error('Akhiri istirahat sebelum presensi pulang.');
+          if (current.state !== 'working' && current.state !== undefined) throw new Error('Presensi masuk belum tersedia.');
+          current.clockOutAt = now.toISOString(); current.clockOut = attendanceTimeLabel(now); current.state = 'completed'; current.clockedIn = false;
+          let minutes = Math.floor((now - new Date(current.clockInAt)) / 60000);
+          sessions.forEach(item => { if (item.end) minutes -= Math.max(0, Math.floor((new Date(item.end) - new Date(item.start)) / 60000)); });
+          minutes = Math.max(0, minutes); current.duration = `${Math.floor(minutes / 60)}j ${minutes % 60}m`;
+          const end = new Date(`${date}T${String(shift.end_time).slice(0, 5)}:00+07:00`);
+          if (String(shift.end_time).slice(0, 5) <= String(shift.start_time).slice(0, 5)) end.setDate(end.getDate() + 1);
+          const extra = Math.max(0, Math.floor((now - end) / 60000));
+          current.overtime = extra ? `${Math.floor(extra / 60)}j ${extra % 60}m` : '—'; current.overtimeApprovalStatus = extra ? 'pending' : 'not_required';
+        }
+        current.breakSessions = sessions; current.location = location; userAttendanceRecord = current;
+      }
+      if (authenticatedSupabaseSession) {
+        attendanceSyncQueue.push({ action, date, location });
+        writeStoredValue('teamhub.attendanceQueue', attendanceSyncQueue);
+        userAttendanceRecord.provisional = true;
+        showToast('Presensi dicatat sementara. Akan diverifikasi dan disinkronkan saat koneksi tersedia.');
+      } else {
+        userAttendanceRecord.provisional = false;
+        showToast('Presensi demo dicatat di perangkat ini.');
+      }
+    }
+    persistUserAttendance(false);
+    if (window.KharismaDB?.isConnected && authenticatedSupabaseSession) {
+      cloudAttendanceRecords = await window.KharismaDB.attendance.getAll();
+      showToast(`Status presensi diperbarui: ${attendanceDisplayState()}.`);
+    }
+    moduleView.innerHTML = pageMarkup('attendance');
+    setupTablePagination();
+  } catch (error) {
+    showToast(error.message || 'Presensi gagal dicatat. Periksa lokasi lalu coba lagi.');
+  } finally {
+    attendanceActionPending = false;
+    const retryButton = moduleView.querySelector(`[data-action="attendance-transition"][data-transition="${action}"]`);
+    if (retryButton) { retryButton.disabled = false; retryButton.textContent = ({ clock_in: 'Absen Masuk', break_start: 'Mulai Istirahat', break_end: 'Kembali Bekerja', clock_out: 'Presensi Pulang' })[action] || 'Catat Presensi'; }
+  }
+}
 function persistUserAttendance() { writeStoredValue('teamhub.userAttendance', userAttendanceRecord); }
 
 const defaultNotifications = [
@@ -121,22 +412,14 @@ function persistEmployeeData() {
     localStorage.setItem('teamhub.employeeIds', JSON.stringify(Object.fromEntries(employeeIdByName)));
   } catch {}
   if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
-  if (typeof window !== 'undefined' && window.fetch) {
-    window.fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        employees: employeeData.map((p, i) => ({
-          id: `EMP-${getEmployeeId(p) || String(i + 1).padStart(4, '0')}`,
-          name: p[0],
-          email: p[1],
-          department: p[2],
-          title: p[3],
-          status: p[4] || 'On-Time',
-          work_model: employeeProfileOverrides[p[0]]?.workModel || 'Hybrid'
-        }))
-      })
-    }).catch(() => {});
+  if (!cloudDataHydrating && authenticatedSupabaseSession && isAdmin() && window.KharismaDB?.isConnected) {
+    const snapshot = employeeData.map(person => [...person]);
+    employeeCloudWriteQueue = employeeCloudWriteQueue.catch(() => {}).then(() => Promise.all(snapshot.map(person => {
+      const profile = employeeProfileOverrides[person[0]] || {};
+      return window.KharismaDB.employees.save({ id: `EMP-${getEmployeeId(person)}`, name: person[0], email: person[1], department: person[2], title: person[3], status: person[4], employmentType: profile.employmentType, workModel: profile.workModel, joinDate: profile.joinDate, gender: profile.gender, birthDate: profile.birthDate, phone: profile.phone, address: profile.address });
+    }))).then(results => {
+      if (results.some(result => !result?.ok)) showToast('Perubahan karyawan tersimpan lokal, tetapi sebagian gagal disinkronkan ke cloud.');
+    });
   }
 }
 
@@ -202,10 +485,10 @@ function getEmployeeProfile(name) {
     title: employee[3],
     id: `EMP-${id}`,
     status: employee[4] === 'On Leave' ? 'On Leave' : (employee[4] === 'Absent' ? 'Absent' : 'Active'),
-    gender: overrides.gender || 'Not provided',
-    birthDate: overrides.birthDate || 'Not provided',
+    gender: overrides.gender || 'Belum diisi',
+    birthDate: overrides.birthDate || 'Belum diisi',
     phone: overrides.phone || '+62 812-9876-' + String(1000 + index * 37).slice(0, 4),
-    address: overrides.address || 'Jakarta, Indonesia',
+    address: overrides.address || 'Belum diisi',
     employmentType: overrides.employmentType || employmentTypes[seedIndex % employmentTypes.length],
     workModel: overrides.workModel || workModels[seedIndex % workModels.length],
     joinDate: overrides.joinDate || joinDates[seedIndex % joinDates.length],
@@ -251,13 +534,6 @@ function persistCalendarItems() {
   writeStoredValue('teamhub.calendarItems', calendarItems);
   if (typeof renderDashboardMiniCalendar === 'function') renderDashboardMiniCalendar();
   if (typeof renderDashboardScheduleList === 'function') renderDashboardScheduleList();
-  if (typeof window !== 'undefined' && window.fetch) {
-    window.fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ calendar: calendarItems })
-    }).catch(() => {});
-  }
 }
 
 /* ==========================================================================
@@ -280,13 +556,6 @@ let leaveRequests = readStoredValue('teamhub.leaveRequests', defaultLeaveRequest
 function persistLeaveRequests() {
   writeStoredValue('teamhub.leaveRequests', leaveRequests);
   if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
-  if (typeof window !== 'undefined' && window.fetch) {
-    window.fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ leave: leaveRequests })
-    }).catch(() => {});
-  }
 }
 
 /* ==========================================================================
@@ -305,13 +574,6 @@ let applicantsData = readStoredValue('teamhub.applicants', defaultApplicants);
 function persistApplicants() {
   writeStoredValue('teamhub.applicants', applicantsData);
   if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
-  if (typeof window !== 'undefined' && window.fetch) {
-    window.fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ applicants: applicantsData })
-    }).catch(() => {});
-  }
 }
 
 /* ==========================================================================
@@ -366,14 +628,18 @@ const defaultKpiData = [
 ];
 
 let kpiData = readStoredValue('teamhub.kpiData', defaultKpiData);
+let payRunData = readStoredValue('teamhub.payRuns', []);
+let reviewCycleData = readStoredValue('teamhub.reviewCycles', []);
+function persistPayRuns() { writeStoredValue('teamhub.payRuns', payRunData); }
+function persistReviewCycles() { writeStoredValue('teamhub.reviewCycles', reviewCycleData); }
 function persistKpiData() {
   writeStoredValue('teamhub.kpiData', kpiData);
-  if (typeof window !== 'undefined' && window.fetch) {
-    window.fetch('/api/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kpis: kpiData })
-    }).catch(() => {});
+  if (!cloudDataHydrating && authenticatedSupabaseSession && window.KharismaDB?.isConnected) {
+    const allowed = isAdmin() ? kpiData : kpiData.filter(item => item.dept === getActiveDepartment());
+    const snapshot = allowed.map(item => ({ ...item }));
+    kpiCloudWriteQueue = kpiCloudWriteQueue.catch(() => {}).then(() => Promise.all(snapshot.map(item => window.KharismaDB.kpi.save(item)))).then(results => {
+      if (results.some(result => !result?.ok)) showToast('Perubahan KPI tersimpan lokal, tetapi sebagian gagal disinkronkan ke cloud.');
+    });
   }
 }
 
@@ -399,11 +665,38 @@ let activeAccountId = readStoredValue('teamhub.activeAccountId', 'usr-admin');
 function persistActiveAccount() { writeStoredValue('teamhub.activeAccountId', activeAccountId); }
 function getActiveAccount() {
   const acc = userAccounts.find(u => u.id === activeAccountId && u.status !== 'Inactive');
-  return acc || userAccounts.find(u => u.role === 'Admin' && u.status !== 'Inactive') || userAccounts[0];
+  return acc || userAccounts.find(u => u.role === 'Admin' && u.status === 'Active') || userAccounts.find(u => u.status === 'Active') || userAccounts[0] || defaultUserAccounts[0];
 }
 function isAdmin() { return getActiveAccount().role === 'Admin'; }
 function isSupervisor() { return getActiveAccount().role === 'Supervisor'; }
 function getActiveDepartment() { return getActiveAccount().department; }
+function syncActiveProfileFromAccount(persist = false) {
+  const account = getActiveAccount();
+  if (!account) return;
+  userProfile.name = account.name;
+  userProfile.email = account.email;
+  userProfile.role = account.title || (account.role === 'Admin' ? 'Administrator SDM' : 'Supervisor');
+  userProfile.department = account.department || '';
+  if (persist) persistUserProfile();
+  document.querySelectorAll('.user-chip').forEach((chip) => {
+    const name = chip.querySelector('strong');
+    const role = chip.querySelector('small');
+    if (name) name.textContent = account.name;
+    if (role) role.textContent = account.role === 'Admin' ? 'Administrator' : 'Supervisor';
+    chip.title = `Profil ${account.name}`;
+    const avatarInitial = chip.querySelector('.avatar span');
+    if (avatarInitial) avatarInitial.textContent = initials(account.name);
+  });
+  const displayName = document.querySelector('#profileDisplayName');
+  const displayEmail = document.querySelector('#profileDisplayEmail');
+  const roleBadge = document.querySelector('#profileRoleBadge');
+  const profileInitials = document.querySelector('#profileAvatarInitials');
+  if (displayName) displayName.textContent = account.name;
+  if (displayEmail) displayEmail.textContent = account.email;
+  if (roleBadge) roleBadge.textContent = `${userProfile.role} · ${userProfile.department}`;
+  if (profileInitials) profileInitials.textContent = initials(account.name);
+}
+syncActiveProfileFromAccount();
 
 /* Cross-module sync: Employee directory ↔ KPI PIC ↔ Division Head ↔ User Accounts */
 function findEmployeeByName(name) {
@@ -426,6 +719,10 @@ function syncEmployeeChange(oldName, oldEmail, next) {
     if (next.name) u.name = next.name;
     if (next.email) u.email = next.email;
     if (next.department && u.role === 'Supervisor' && departmentsData.some(d => d.name === next.department)) u.department = next.department;
+    if (authenticatedSupabaseSession && isAdmin() && window.KharismaAuth?.adminRequest) {
+      window.KharismaAuth.adminRequest('PATCH', { id: u.id, name: u.name, email: u.email, department: u.department, title: u.title })
+        .catch(error => showToast(`Profil akun ${u.name} belum tersinkron ke cloud: ${error.message}`));
+    }
     changed.users++;
   });
   if (changed.users) persistUserAccounts();
@@ -476,6 +773,13 @@ let archivedMail = [];
 let trashedMail = [];
 let spamMail = [{ id: 'spam-1', from: 'External sender', email: 'offers@example.com', subject: 'Special offer', preview: 'This message was marked as spam.', time: '16 Jun', date: '16 Jun', initials: 'ES', color: 'label-admin', label: 'Admin Notes', body: ['This message was marked as spam.'], unread: false, starred: false }];
 let unreadOnly = false;
+const savedMailbox = readStoredValue('teamhub.mailbox', {});
+for (const [key, list] of [['inbox', inboxData], ['sent', sentMail], ['drafts', draftMail], ['archived', archivedMail], ['trashed', trashedMail], ['spam', spamMail]]) {
+  if (Array.isArray(savedMailbox[key])) list.splice(0, list.length, ...savedMailbox[key]);
+}
+function persistMailbox() {
+  writeStoredValue('teamhub.mailbox', { inbox: inboxData, sent: sentMail, drafts: draftMail, archived: archivedMail, trashed: trashedMail, spam: spamMail });
+}
 
 /* ==========================================================================
    Table Pagination Helper
@@ -534,9 +838,36 @@ function showTablePage(page) {
 
 const weekdays = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
 const currentSysDate = new Date();
-let calendarDate = new Date(currentSysDate.getFullYear(), currentSysDate.getMonth(), 1);
-let moduleCalendarDate = new Date(currentSysDate.getFullYear(), currentSysDate.getMonth(), 1);
-let selectedDate = currentSysDate.getDate();
+function getCalendarItemDate(item, fallbackDate = calendarDate) {
+  const match = String(item?.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const day = Number(item?.day);
+  return Number.isFinite(day) && day > 0
+    ? new Date(fallbackDate.getFullYear(), fallbackDate.getMonth(), day)
+    : null;
+}
+
+function toLocalISODate(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+const firstCalendarItemDate = [...calendarItems]
+  .map(item => getCalendarItemDate(item, currentSysDate))
+  .filter(Boolean)
+  .sort((a, b) => a - b)[0];
+let calendarDate = new Date(
+  (firstCalendarItemDate || currentSysDate).getFullYear(),
+  (firstCalendarItemDate || currentSysDate).getMonth(),
+  1
+);
+let moduleCalendarDate = new Date(calendarDate);
+const preferredCalendarDay = calendarItems
+  .map(item => getCalendarItemDate(item, currentSysDate))
+  .find(date => date.getFullYear() === calendarDate.getFullYear() && date.getMonth() === calendarDate.getMonth() && date.getDate() === 21);
+let selectedDate = preferredCalendarDay?.getDate() || firstCalendarItemDate?.getDate() || currentSysDate.getDate();
+let selectedCalendarEventId = null;
 
 function renderDashboardMiniCalendar() {
   const grid = document.querySelector('#calendarGrid');
@@ -557,7 +888,12 @@ function renderDashboardMiniCalendar() {
   const count = new Date(year, month + 1, 0).getDate();
   for (let i = 0; i < offset; i += 1) grid.append(document.createElement('span'));
   
-  const activeEventDays = new Set(calendarItems.map(item => item.day));
+  const activeEventDays = new Set(calendarItems
+    .filter(item => {
+      const date = getCalendarItemDate(item);
+      return date && date.getFullYear() === year && date.getMonth() === month;
+    })
+    .map(item => getCalendarItemDate(item).getDate()));
   for (let day = 1; day <= count; day += 1) {
     const item = document.createElement('span');
     item.textContent = day;
@@ -587,7 +923,11 @@ function renderDashboardMiniCalendar() {
 function renderDashboardScheduleList(day = selectedDate) {
   const list = document.querySelector('#schedules');
   if (!list) return;
-  const dayEvents = calendarItems.filter(item => item.day === day);
+  const monthName = new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(calendarDate);
+  const dayEvents = calendarItems.filter(item => {
+    const date = getCalendarItemDate(item);
+    return date && date.getFullYear() === calendarDate.getFullYear() && date.getMonth() === calendarDate.getMonth() && date.getDate() === Number(day);
+  });
   if (!dayEvents.length) {
     list.innerHTML = `<div style="padding:14px 10px;text-align:center;color:#64748b;font-size:10px;background:#f8fafc;border-radius:8px">Tidak ada jadwal untuk tanggal ${day} ${monthName}. <button class="date-filter" style="margin-top:6px;display:inline-block" data-action="new-event">＋ Tambah Agenda</button></div>`;
     return;
@@ -705,8 +1045,11 @@ const section = (title, body, extra = '') => `<section class="module-card"><div 
    Module Markup Generators
    ========================================================================== */
 
-function getCalendarScheduleCards(day) {
-  const events = calendarItems.filter(item => item.day === Number(day));
+function getCalendarScheduleCards(day, eventId = selectedCalendarEventId) {
+  const events = calendarItems.filter(item => {
+    const date = getCalendarItemDate(item);
+    return date && date.getFullYear() === calendarDate.getFullYear() && date.getMonth() === calendarDate.getMonth() && date.getDate() === Number(day) && (!eventId || String(item.id) === String(eventId));
+  });
   if (!events.length) {
     return `
       <div style="padding:20px 10px;text-align:center;color:#64748b;font-size:11px">
@@ -738,8 +1081,11 @@ function pageMarkup(key) {
   // Group calendar items by day
   const eventsByDay = {};
   calendarItems.forEach(item => {
-    if (!eventsByDay[item.day]) eventsByDay[item.day] = [];
-    eventsByDay[item.day].push(item);
+    const date = getCalendarItemDate(item);
+    if (!date || date.getFullYear() !== calendarDate.getFullYear() || date.getMonth() !== calendarDate.getMonth()) return;
+    const day = date.getDate();
+    if (!eventsByDay[day]) eventsByDay[day] = [];
+    eventsByDay[day].push(item);
   });
 
   const calYear = calendarDate.getFullYear();
@@ -760,7 +1106,7 @@ function pageMarkup(key) {
       <div class="calendar-cell ${d === selectedDate ? 'active-date' : ''}">
         <button data-action="pick-calendar-day" data-day="${d}">${d}</button>
         ${dayEvents.map(ev => `
-          <button class="calendar-event event-tone-${ev.tone || 0}" data-action="open-agenda-event" data-title="${safe(ev.title)}" data-day="${d}">
+          <button class="calendar-event event-tone-${ev.tone || 0}" data-action="open-agenda-event" data-id="${safe(ev.id)}" data-title="${safe(ev.title)}" data-day="${d}">
             <strong>${safe(ev.title)}</strong>
             <small>${safe(ev.time)}</small>
           </button>
@@ -801,8 +1147,29 @@ function pageMarkup(key) {
     </tr>
   `).join('');
 
+  const todayAttendanceKey = attendanceTodayKey();
+  if (userAttendanceRecord && userAttendanceRecord.dateKey !== todayAttendanceKey && !isActiveOvernightAttendance(userAttendanceRecord)) {
+    if (userAttendanceRecord.state !== 'completed' && !userAttendanceRecord.clockOut) {
+      attendanceIncompleteHistory = [userAttendanceRecord, ...attendanceIncompleteHistory.filter(record => record.id !== userAttendanceRecord.id)].slice(0, 30);
+      writeStoredValue('teamhub.attendanceIncompleteHistory', attendanceIncompleteHistory);
+    }
+    userAttendanceRecord = null;
+    persistUserAttendance(false);
+  }
   const allAttendanceItems = [];
-  if (userAttendanceRecord) {
+  if (Array.isArray(cloudAttendanceRecords)) {
+    cloudAttendanceRecords.forEach((record, i) => {
+      const employee = employeeData.find(person => person[1]?.toLowerCase() === String(record.employee_name || '').toLowerCase() || `EMP-${getEmployeeId(person)}` === record.employee_id);
+      const date = record.date ? new Date(`${record.date}T00:00:00`) : new Date();
+      allAttendanceItems.push({
+        name: record.employee_name || employee?.[0] || 'Karyawan', rawName: employee?.[0] || record.employee_name || 'Karyawan',
+        id: record.employee_id || '', title: employee?.[3] || 'Karyawan', dept: employee?.[2] || '',
+        date: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(date),
+        workModel: record.work_model || '—', checkInOut: `${record.clock_in || '—'} – ${record.clock_out || 'Aktif'}`,
+        duration: record.duration || '—', overtime: record.overtime || '—', status: record.state && record.state !== 'completed' ? 'Belum Lengkap' : ({ 'On-Time': 'Tepat Waktu', Late: 'Terlambat', 'On Leave': 'Cuti', Absent: 'Tidak Hadir' }[record.status] || record.status || 'Tepat Waktu'), avatarIdx: (i % 9) + 1
+      });
+    });
+  } else if (userAttendanceRecord) {
     allAttendanceItems.push({
       name: `${userProfile.name} (Anda)`,
       rawName: userProfile.name,
@@ -819,23 +1186,7 @@ function pageMarkup(key) {
       isUser: true
     });
   }
-  employeeData.forEach((p, i) => {
-    allAttendanceItems.push({
-      name: p[0],
-      rawName: p[0],
-      id: `EMP-${getEmployeeId(p)}`,
-      title: p[3],
-      dept: p[2],
-      date: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
-      workModel: ['Hybrid', 'Remote', 'On-Site'][i % 3],
-      checkInOut: p[4] === 'On-Time' ? '08:55 AM – 05:05 PM' : (p[4] === 'Late' ? '09:14 AM – 05:20 PM' : '—'),
-      duration: p[4] === 'On-Time' ? '8h 10m' : (p[4] === 'Late' ? '8h 06m' : '—'),
-      overtime: p[4] === 'Late' ? '14m Terlambat' : '—',
-      status: p[4],
-      avatarIdx: (i % 9) + 1,
-      isUser: false
-    });
-  });
+  // Do not fabricate attendance rows from the employee directory. The table is an audit view.
 
   const attendanceRows = allAttendanceItems.map((item) => `
     <tr class="${item.isUser ? 'user-attendance-row' : ''}">
@@ -851,7 +1202,7 @@ function pageMarkup(key) {
       <td>${safe(item.checkInOut)}</td>
       <td>${safe(item.duration)}</td>
       <td>${safe(item.overtime)}</td>
-      <td><span class="status ${item.status === 'On-Time' ? 'ontime' : item.status === 'Late' ? 'late' : item.status === 'Absent' ? 'absent' : 'leave'}">${safe(item.status)}</span></td>
+      <td><span class="status ${item.status === 'On-Time' || item.status === 'Tepat Waktu' ? 'ontime' : item.status === 'Late' || item.status === 'Terlambat' ? 'late' : item.status === 'Absent' ? 'absent' : item.status === 'Belum Lengkap' ? 'incomplete' : 'leave'}">${safe(item.status)}</span></td>
     </tr>
   `).join('');
 
@@ -1327,97 +1678,128 @@ function pageMarkup(key) {
 
   // 7. ATTENDANCE MODULE
   if (key === 'attendance') {
+    const liveTodayRecords = Array.isArray(cloudAttendanceRecords)
+      ? cloudAttendanceRecords.filter(record => record.date === attendanceTodayKey())
+      : (userAttendanceRecord?.dateKey === attendanceTodayKey() ? [userAttendanceRecord] : []);
+    const livePresent = liveTodayRecords.length;
+    const liveOnTime = liveTodayRecords?.filter(record => record.status === 'On-Time').length || 0;
+    const liveLate = liveTodayRecords?.filter(record => record.status === 'Late').length || 0;
+    const approvedLeaveCount = leaveRequests.filter(r => r.status === 'Approved').length;
+    const scheduledEmployees = new Set((attendancePolicy.assignments || []).map(item => item.employee_id)).size;
+    const liveAbsent = Math.max(0, scheduledEmployees - livePresent - approvedLeaveCount);
+    const thisEmployee = employeeData.find(row => row[1]?.toLowerCase() === userProfile.email.toLowerCase()) || findEmployeeByName(userProfile.name);
+    const thisEmployeeId = thisEmployee ? `EMP-${getEmployeeId(thisEmployee)}` : '';
+    const thisAssignment = attendancePolicy.assignments?.find(item => item.employee_id === thisEmployeeId);
+    const assignedShift = attendancePolicy.shifts?.find(item => item.id === (userAttendanceRecord?.shiftId || thisAssignment?.shift_id));
+    const activeRecordToday = userAttendanceRecord && (userAttendanceRecord.dateKey === attendanceTodayKey() || isActiveOvernightAttendance(userAttendanceRecord));
+    const transitionAction = !activeRecordToday ? 'clock_in'
+      : userAttendanceRecord.state === 'on_break' ? 'break_end'
+        : userAttendanceRecord.state === 'working' ? 'break_start'
+          : userAttendanceRecord.state === 'completed' || userAttendanceRecord.clockOut ? null : 'clock_in';
+    const transitionLabel = transitionAction === 'clock_in' ? 'Absen Masuk' : transitionAction === 'break_start' ? 'Mulai Istirahat' : transitionAction === 'break_end' ? 'Kembali Bekerja' : 'Presensi Selesai';
+    const monthRecords = Array.isArray(cloudAttendanceRecords) ? cloudAttendanceRecords : [];
+    const ownIncompleteRecords = authenticatedSupabaseSession ? monthRecords.filter(record => record.auth_user_id === authenticatedSupabaseSession.user.id && record.date < attendanceTodayKey() && record.state && record.state !== 'completed') : [];
+    const localIncompleteRecords = authenticatedSupabaseSession ? [] : attendanceIncompleteHistory;
+    const monthNames = new Intl.DateTimeFormat('id-ID', { month: 'short' });
+    const chartMonths = Array.from({ length: 6 }, (_, offset) => { const d = new Date(); d.setMonth(d.getMonth() - 5 + offset, 1); const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; const rows = monthRecords.filter(row => String(row.date || '').startsWith(key)); const onLeave = rows.filter(row => row.status === 'On Leave').length; const late = rows.filter(row => row.status === 'Late').length; return { label: monthNames.format(d), total: rows.length, onLeave, late, present: Math.max(0, rows.length - onLeave - late) }; });
+    const chartMax = Math.max(1, ...chartMonths.map(item => item.total));
     return `
       <div class="attendance-overview-layout">
         <div class="attendance-status-cards">
           <article class="attendance-status present">
-            <span class="status-card-label">Present</span>
-            <strong class="status-card-val">${93 + (userAttendanceRecord && userAttendanceRecord.clockedIn ? 1 : 0)} <small>Employees</small></strong>
-            <div class="status-card-trend"><b>+${4 + (userAttendanceRecord && userAttendanceRecord.clockedIn ? 1 : 0)}</b> <span>vs yesterday</span></div>
-            <footer class="status-card-footer"><span><b>${82 + (userAttendanceRecord && userAttendanceRecord.clockedIn && userAttendanceRecord.status === 'On-Time' ? 1 : 0)}</b> On-Time</span><span><b>${11 + (userAttendanceRecord && userAttendanceRecord.clockedIn && userAttendanceRecord.status === 'Late' ? 1 : 0)}</b> Late</span></footer>
+            <span class="status-card-label">Hadir Hari Ini</span>
+            <strong class="status-card-val">${livePresent} <small>Karyawan</small></strong>
+            <div class="status-card-trend"><b>${liveTodayRecords.length}</b> <span>catatan aktual</span></div>
+            <footer class="status-card-footer"><span><b>${liveOnTime}</b> Tepat Waktu</span><span><b>${liveLate}</b> Terlambat</span></footer>
           </article>
           <article class="attendance-status leave">
-            <span class="status-card-label">On Leave</span>
-            <strong class="status-card-val">${leaveRequests.filter(r => r.status === 'Approved').length} <small>Employees</small></strong>
-            <div class="status-card-trend"><b>+1</b> <span>vs yesterday</span></div>
-            <footer class="status-card-footer"><span><b>3</b> Annual</span><span><b>2</b> Sick</span><span><b>1</b> Other</span></footer>
+            <span class="status-card-label">Sedang Cuti</span>
+            <strong class="status-card-val">${approvedLeaveCount} <small>Karyawan</small></strong>
+            <div class="status-card-trend"><b>${approvedLeaveCount}</b> <span>pengajuan disetujui</span></div>
+            <footer class="status-card-footer"><span>Data dari pengajuan cuti</span></footer>
           </article>
           <article class="attendance-status absent">
-            <span class="status-card-label">Absent</span>
-            <strong class="status-card-val">3 <small>Employees</small></strong>
-            <div class="status-card-trend"><b>+2</b> <span>vs yesterday</span></div>
-            <footer class="status-card-footer"><span>Unexcused absence</span></footer>
+            <span class="status-card-label">Belum Tercatat</span>
+            <strong class="status-card-val">${liveAbsent} <small>Karyawan</small></strong>
+            <div class="status-card-trend"><b>${liveAbsent}</b> <span>belum ada catatan hari ini</span></div>
+            <footer class="status-card-footer"><span>Termasuk jadwal masuk hari ini</span></footer>
           </article>
         </div>
         <section class="module-card attendance-chart-card">
           <div class="module-card-head">
-            <h2>Attendance Overview</h2>
-            <select class="module-select"><option>Last 6 Months</option><option>This Year</option></select>
+            <h2>Rekap Kehadiran 6 Bulan</h2>
+            <span class="toolbar-note">Berdasarkan catatan tersimpan</span>
           </div>
           <div class="attendance-chart-content">
+            ${monthRecords.length ? '' : '<p class="dialog-desc">Belum ada catatan kehadiran untuk rentang ini.</p>'}
             <div class="attendance-chart-legend">
-              <span><i class="legend-circle pres-dot"></i>Present</span>
-              <span><i class="legend-circle leave-dot"></i>On Leave</span>
-              <span><i class="legend-circle abs-dot"></i>Absent</span>
+              <span><i class="legend-circle pres-dot"></i>Hadir</span>
+              <span><i class="legend-circle leave-dot"></i>Cuti</span>
+              <span><i class="legend-circle abs-dot"></i>Terlambat</span>
             </div>
             <div class="attendance-chart-wrap">
               <div class="attendance-y-axis">
                 <span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span>
               </div>
               <div class="attendance-bars-container">
-                ${[
-                  ['Feb', 88, 8, 4],
-                  ['Mar', 92, 5, 3],
-                  ['Apr', 86, 11, 3],
-                  ['May', 94, 4, 2],
-                  ['Jun', 91, 6, 3],
-                  ['Jul', 95, 3, 2]
-                ].map(([m, pres, lv, abs]) => `
+                ${chartMonths.map(({ label, total, onLeave, late, present }) => {
+                  const scale = total ? 100 / chartMax : 0; const pres = present * scale, lv = onLeave * scale, abs = late * scale;
+                  return `
                   <div class="attendance-bar-col">
                     <div class="bar-track">
-                      <span class="bar-fill abs-fill" style="height:${abs}%" title="${m}: ${abs}% Absent"></span>
-                      <span class="bar-fill leave-fill" style="height:${lv}%" title="${m}: ${lv}% On Leave"></span>
-                      <span class="bar-fill pres-fill" style="height:${pres}%" title="${m}: ${pres}% Present"></span>
+                      <span class="bar-fill abs-fill" style="height:${abs}%" title="${label}: ${late} terlambat"></span>
+                      <span class="bar-fill leave-fill" style="height:${lv}%" title="${label}: ${onLeave} cuti"></span>
+                      <span class="bar-fill pres-fill" style="height:${pres}%" title="${label}: ${present} hadir"></span>
                     </div>
-                    <span class="bar-col-label">${m}</span>
+                    <span class="bar-col-label">${label}</span>
                   </div>
-                `).join('')}
+                `; }).join('')}
               </div>
             </div>
           </div>
         </section>
       </div>
-      ${section('Employee Attendance', `
+      <section class="module-card attendance-self-service">
+        <div class="module-card-head"><div><h2>Presensi Saya</h2><p class="dialog-desc">${assignedShift ? `Shift ${safe(assignedShift.name)} · ${String(assignedShift.start_time).slice(0,5)}–${String(assignedShift.end_time).slice(0,5)}` : 'Shift belum ditetapkan'} · ${attendanceDisplayState()}</p></div>
+          ${transitionAction ? `<button class="module-button primary" data-action="attendance-transition" data-transition="${transitionAction}">${transitionLabel}</button>` : `<span class="status ontime">Hari ini selesai</span>`}${activeRecordToday && userAttendanceRecord.state === 'working' ? `<button class="module-button secondary" data-action="attendance-transition" data-transition="clock_out">Presensi Pulang</button>` : ''}</div>
+        <div class="attendance-timeline"><span>Masuk <b>${safe(userAttendanceRecord?.clockIn || '—')}</b></span>${(userAttendanceRecord?.breakSessions || []).map((item,index)=>`<span>Istirahat ${index+1} <b>${attendanceTimeLabel(item.start)}–${item.end ? attendanceTimeLabel(item.end) : 'berlangsung'}</b></span>`).join('')}<span>Pulang <b>${safe(userAttendanceRecord?.clockOut || '—')}</b></span><span>Durasi bersih <b>${safe(userAttendanceRecord?.duration || '—')}</b></span><span>Lokasi <b>${userAttendanceRecord?.location?.verified ? `Terverifikasi · ${Math.round(userAttendanceRecord.location.distance)} m dari kantor` : 'Akan diperiksa saat absen'}</b></span>${userAttendanceRecord?.overtimeApprovalStatus === 'pending' ? '<span>Lembur <b>Menunggu persetujuan atasan</b></span>' : ''}${attendanceSyncQueue.length ? `<span>Antrean sinkronisasi <b>${attendanceSyncQueue.length} aksi menunggu validasi</b></span>` : ''}</div>
+        ${userAttendanceRecord?.id ? `<details class="attendance-correction"><summary>Ajukan koreksi catatan</summary><form data-attendance-correction><label>Jam masuk yang benar<input type="time" name="clockIn" value="${safe(String(userAttendanceRecord.clockIn || '').slice(0,5))}" /></label><label>Jam pulang yang benar<input type="time" name="clockOut" value="${safe(String(userAttendanceRecord.clockOut || '').slice(0,5))}" /></label><label>Alasan koreksi<textarea name="reason" minlength="5" maxlength="1000" required></textarea></label><button class="module-button secondary" type="submit">Kirim untuk Persetujuan</button></form></details>` : ''}
+        ${ownIncompleteRecords.map(record=>`<details class="attendance-correction"><summary>Lengkapi presensi ${safe(record.date)} · belum pulang</summary><form data-attendance-correction data-attendance-id="${safe(record.id)}"><label>Jam masuk yang benar<input type="time" name="clockIn" value="${safe(String(record.clock_in || '').slice(0,5))}" /></label><label>Jam pulang yang benar<input type="time" name="clockOut" required /></label><label>Alasan koreksi<textarea name="reason" minlength="5" maxlength="1000" required></textarea></label><button class="module-button secondary" type="submit">Ajukan Koreksi</button></form></details>`).join('')}
+        ${localIncompleteRecords.map(record=>`<p class="dialog-desc attendance-incomplete-note">Presensi demo ${safe(record.date || record.dateKey)} belum lengkap. Lengkapi catatan atau ajukan koreksi setelah akun terhubung ke Supabase.</p>`).join('')}
+      </section>
+      ${isAdmin() ? `<details class="module-card attendance-policy-admin"><summary>Pengaturan Lokasi, Shift, dan Penugasan</summary><form data-attendance-config><div class="dialog-two"><label>Lintang kantor<input type="number" step="any" name="latitude" value="${safe(attendancePolicy.location?.latitude ?? '')}" required /></label><label>Bujur kantor<input type="number" step="any" name="longitude" value="${safe(attendancePolicy.location?.longitude ?? '')}" required /></label></div><div class="dialog-two"><label>Radius kantor (meter)<input type="number" name="radius" min="20" max="5000" value="${safe(attendancePolicy.location?.radius_m || attendancePolicy.location?.radiusM || 150)}" required /></label><label>Nama shift<input name="shiftName" value="${safe(assignedShift?.name || attendancePolicy.shifts?.[0]?.name || 'Shift Pagi')}" required /></label></div><div class="dialog-two"><label>Mulai shift<input type="time" name="startTime" value="${safe(String(assignedShift?.start_time || attendancePolicy.shifts?.[0]?.start_time || '09:00').slice(0,5))}" required /></label><label>Selesai shift<input type="time" name="endTime" value="${safe(String(assignedShift?.end_time || attendancePolicy.shifts?.[0]?.end_time || '17:00').slice(0,5))}" required /></label></div><div class="dialog-two"><label>Toleransi terlambat (menit)<input type="number" name="tolerance" min="0" max="240" value="${safe(assignedShift?.tolerance_minutes || 15)}" /></label><label>Tetapkan shift kepada karyawan<select name="employeeId" required>${employeeData.map(person=>`<option value="EMP-${getEmployeeId(person)}">${safe(person[0])} · ${safe(person[2])}</option>`).join('')}</select></label></div><button class="module-button primary" type="submit">Simpan Kebijakan</button><small>Perubahan lokasi dan shift hanya tersimpan di Supabase saat terhubung. Atasan dapat menetapkan shift untuk karyawan di departemennya.</small></form></details>` : ''}
+      ${userProfile.role === 'Supervisor' ? `<details class="module-card attendance-policy-admin"><summary>Tetapkan Shift Tim</summary><form data-attendance-assignment><label>Karyawan<select name="employeeId" required><option value="__department__">Seluruh tim ? ${safe(userProfile.department)}</option>${employeeData.filter(person=>person[2]===userProfile.department).map(person=>`<option value="EMP-${getEmployeeId(person)}">${safe(person[0])}</option>`).join('')}</select></label><label>Shift<select name="shiftId" required>${(attendancePolicy.shifts||[]).map(shift=>`<option value="${safe(shift.id)}">${safe(shift.name)} ? ${safe(String(shift.start_time).slice(0,5))}?${safe(String(shift.end_time).slice(0,5))}</option>`).join('')}</select></label><button class="module-button primary" type="submit">Simpan Penugasan</button></form></details>` : ''}
+      ${(isAdmin() || userProfile.role === 'Supervisor') ? `<section class="module-card attendance-review-panel"><div class="module-card-head"><h2>Persetujuan Absensi</h2><span class="toolbar-note">${attendanceReviewQueue.corrections.length} koreksi · ${attendanceReviewQueue.overtime.length} lembur</span></div>${attendanceReviewQueue.corrections.map(request=>`<article class="attendance-review-item"><span><strong>${safe(request.attendance_records?.employee_name || 'Karyawan')}</strong><small>Koreksi: ${safe(JSON.stringify(request.requested_values || {}))} · ${safe(request.reason)}</small></span><button class="module-button secondary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="rejected">Tolak</button><button class="module-button primary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="approved">Setujui</button></article>`).join('')}${attendanceReviewQueue.overtime.map(record=>`<article class="attendance-review-item"><span><strong>${safe(record.employee_name)} · ${safe(record.date)}</strong><small>Lembur ${safe(record.overtime)}</small></span><button class="module-button secondary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="false">Tolak</button><button class="module-button primary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="true">Setujui</button></article>`).join('')}${!attendanceReviewQueue.corrections.length && !attendanceReviewQueue.overtime.length ? '<p class="dialog-desc">Tidak ada koreksi atau lembur yang menunggu persetujuan.</p>' : ''}</section>` : ''}
+      ${section('Daftar Kehadiran', `
         <div class="module-toolbar">
-          <label class="module-search">⌕ <input data-filter="attendance" placeholder="Search employee" /></label>
+          <label class="module-search">⌕ <input data-filter="attendance" placeholder="Cari karyawan" /></label>
           <div class="filter-dropdown-wrap">
-            <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'Filter'} <span>⌄</span></button>
+            <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'Semua Status'} <span>⌄</span></button>
             <div class="filter-dropdown-menu" id="attendanceFilterDropdown" style="display:none">
               <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Semua Status">Semua Status</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="On-Time">On-Time</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Late">Late</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="On Leave">On Leave</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Absent">Absent</button>
+              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Tepat Waktu">Tepat Waktu</button>
+              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Terlambat">Terlambat</button>
+              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Cuti">Cuti</button>
+              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Tidak Hadir">Tidak Hadir</button>
             </div>
           </div>
           <span class="toolbar-note">Sort by:</span>
-          <select id="attendanceSortSelect"><option value="0">Name</option><option value="1">Job Title</option><option value="4">Check In - Out</option><option value="7">Status</option></select>
+          <select id="attendanceSortSelect"><option value="0">Nama</option><option value="1">Jabatan</option><option value="4">Masuk - Pulang</option><option value="7">Status</option></select>
           <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
-            <button class="module-button primary" data-action="clock-in" id="attendanceClockBtn">${userAttendanceRecord && userAttendanceRecord.clockedIn ? `Presensi Pulang · <small>Masuk: ${userAttendanceRecord.clockIn}</small>` : 'Clock In / Out'}</button>
-            <button class="module-button secondary" data-action="export-attendance">Export report</button>
+            <button class="module-button secondary" data-action="export-attendance">Unduh Laporan</button>
           </div>
         </div>
         <div class="module-table-wrap">
           <table class="module-table attendance-full-table">
             <thead>
               <tr>
-                <th class="sortable" data-col="0">Name ↕</th>
-                <th class="sortable" data-col="1">Job Title ↕</th>
-                <th class="sortable" data-col="2">Date ↕</th>
-                <th class="sortable" data-col="3">Work Model ↕</th>
-                <th class="sortable" data-col="4">Check In - Out ↕</th>
-                <th class="sortable" data-col="5">Duration ↕</th>
-                <th class="sortable" data-col="6">Overtime ↕</th>
+                <th class="sortable" data-col="0">Nama ↕</th>
+                <th class="sortable" data-col="1">Jabatan ↕</th>
+                <th class="sortable" data-col="2">Tanggal ↕</th>
+                <th class="sortable" data-col="3">Model Kerja ↕</th>
+                <th class="sortable" data-col="4">Masuk - Pulang ↕</th>
+                <th class="sortable" data-col="5">Durasi Bersih ↕</th>
+                <th class="sortable" data-col="6">Lembur ↕</th>
                 <th class="sortable" data-col="7">Status ↕</th>
               </tr>
             </thead>
@@ -1425,7 +1807,7 @@ function pageMarkup(key) {
           </table>
         </div>
         <div class="pagination-row">
-          <label>Show <select><option>10</option></select> of ${employeeData.length} results</label>
+          <label>Show <select><option>10</option></select> of ${allAttendanceItems.length} results</label>
           <div><button>‹</button><button class="page-current">1</button><button>2</button><button>›</button></div>
         </div>
       `)}
@@ -1453,6 +1835,7 @@ function pageMarkup(key) {
             </table>
           </div>
         `)}
+        ${reviewCycleData.length ? section('Periode Penilaian', `<div class="performer-list">${reviewCycleData.map(cycle => `<p><span><strong>${safe(cycle.name)}</strong><small>${safe(cycle.type)} · Dibuat ${safe(cycle.createdAt)}</small></span><b>${safe(cycle.status)}</b></p>`).join('')}</div>`) : ''}
         <aside>
           ${section('Top Performers', `<div class="performer-list">${employeeData.slice(0, 5).map((p, i) => `<p>${avatar(p[0], `p${i + 1}`)}<span><strong>${p[0]}</strong><small>${p[3]}</small></span><b>${92 - i}/100</b></p>`).join('')}</div>`)}
           ${section('Time Management Alerts', `<div class="performer-list">${employeeData.slice(2, 5).map((p) => `<p>${avatar(p[0], 'p3')}<span><strong>${p[0]}</strong><small>Low on-time rate for deliverables this month.</small></span></p>`).join('')}</div>`)}
@@ -1537,6 +1920,7 @@ function pageMarkup(key) {
           <label>Menampilkan ${employeeData.length} data penggajian</label>
         </div>
       `)}
+      ${payRunData.length ? section('Riwayat Persiapan Gaji', `<div class="performer-list">${payRunData.map(run => `<p><span><strong>${safe(run.period)}</strong><small>Tanggal pembayaran ${safe(run.paymentDate)} · ${run.employeeCount} karyawan · Total ${formatIDR(run.total)}</small></span><b>${safe(run.status)}</b></p>`).join('')}</div>`) : ''}
     `;
   }
 
@@ -1915,12 +2299,7 @@ function pageMarkup(key) {
 
     // Calculate score for each KPI
     const calculatedKpi = visibleKpi.map(k => {
-      let score = 0;
-      if (k.lowerIsBetter) {
-        score = (k.target / (k.actual || 1)) * 100;
-      } else {
-        score = ((k.actual || 0) / (k.target || 1)) * 100;
-      }
+      const score = calculateKpiScore(k);
       return { ...k, score: Math.round(score * 10) / 10 };
     });
 
@@ -1960,10 +2339,10 @@ function pageMarkup(key) {
               <span class="${roleBadgeClass}">${roleLabel}</span>
             </div>
           </div>
-          <div class="account-switcher-row">
+          ${authenticatedSupabaseSession ? '' : `<div class="account-switcher-row">
             <label>Masuk Sebagai:</label>
             <select id="accountSwitcher" data-action="switch-account">${accountOptions}</select>
-          </div>
+          </div>`}
         </div>
 
         <!-- Sub-nav Tabs -->
@@ -2430,12 +2809,19 @@ function openModule(key, updateUrl = true, params = null) {
 
   // Stale-while-revalidate data hydration from Supabase
   if (window.KharismaDB && window.KharismaDB.isConnected) {
-    if (key === 'employees' || key === 'employee-grid') {
+    if (key === 'employees' || key === 'employee-grid' || key === 'employee-details') {
       window.KharismaDB.employees.getAll(employeeData).then(remote => {
+        Object.assign(employeeProfileOverrides, window.__kharismaEmployeeProfiles || {});
+        if (remote?.length) remote.forEach(row => {
+          if (row[5] && /^EMP-/.test(row[5])) employeeIdByName.set(row[0], row[5].replace(/^EMP-/, ''));
+        });
+        persistProfileOverrides();
         if (remote && remote.length && JSON.stringify(remote) !== JSON.stringify(employeeData)) {
+          cloudDataHydrating = true;
           employeeData.length = 0;
           remote.forEach(r => employeeData.push(r));
           persistEmployeeData();
+          cloudDataHydrating = false;
           if (moduleView && (moduleView.dataset.page === 'employees' || moduleView.dataset.page === 'employee-grid')) {
             moduleView.innerHTML = pageMarkup(moduleView.dataset.page);
           }
@@ -2444,13 +2830,32 @@ function openModule(key, updateUrl = true, params = null) {
     } else if (key === 'kpi') {
       window.KharismaDB.kpi.getAll(kpiData).then(remote => {
         if (remote && remote.length && JSON.stringify(remote) !== JSON.stringify(kpiData)) {
+          cloudDataHydrating = true;
           kpiData.length = 0;
           remote.forEach(r => kpiData.push(r));
           persistKpiData();
+          cloudDataHydrating = false;
           if (moduleView && moduleView.dataset.page === 'kpi') {
             moduleView.innerHTML = pageMarkup('kpi');
           }
         }
+      });
+    } else if (key === 'attendance') {
+      window.KharismaDB.attendance.getPolicy().then(policy => { attendancePolicy = policy; writeStoredValue('teamhub.attendancePolicy', policy); }).catch(() => {});
+      if (userProfile.role === 'Admin' || userProfile.role === 'Supervisor') window.KharismaDB.attendance.getReviewQueue().then(queue => { attendanceReviewQueue = queue; if (moduleView?.dataset.page === 'attendance') { moduleView.innerHTML = pageMarkup('attendance'); setupTablePagination(); } }).catch(() => {});
+      window.KharismaDB.attendance.getAll().then(records => {
+        cloudAttendanceRecords = records;
+        if (moduleView && moduleView.dataset.page === 'attendance') {
+          moduleView.innerHTML = pageMarkup('attendance');
+          setupTablePagination();
+        }
+      }).catch(error => {
+        cloudAttendanceRecords = [];
+        if (moduleView && moduleView.dataset.page === 'attendance') {
+          moduleView.innerHTML = pageMarkup('attendance');
+          setupTablePagination();
+        }
+        showToast(`Data presensi cloud belum dapat dimuat: ${error.message || 'kesalahan koneksi'}.`);
       });
     } else if (key === 'leave') {
       window.KharismaDB.leave.getAll(leaveRequests).then(remote => {
@@ -2628,13 +3033,15 @@ let activeAction = '';
 
 function openActionDialog(action, defaultDay = null) {
   activeAction = action;
+  const agendaDefaultDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth(), Number(defaultDay || selectedDate || 1));
+  const today = new Date();
   const config = {
     'new-event': [
       'New Calendar Agenda',
       `<label>Judul Agenda<input name="title" required placeholder="mis. Wawancara Kandidat UI" /></label>
        <label>Kategori<select name="category"><option>Talent Acquisition</option><option>Employee Development</option><option>Workplace Engagement</option></select></label>
        <div class="dialog-two">
-         <label>Tanggal<input name="date" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label>
+         <label>Tanggal<input name="date" type="date" value="${toLocalISODate(agendaDefaultDate)}" required /></label>
          <label>Jam<input name="time" type="time" value="09:00" required /></label>
        </div>
        <label>Lokasi / Tautan<input name="location" placeholder="Ruang Rapat C / Google Meet" /></label>
@@ -2644,8 +3051,8 @@ function openActionDialog(action, defaultDay = null) {
       'Ajukan Permohonan Cuti',
       `<label>Jenis Cuti<select name="type"><option>Annual Leave (Cuti Tahunan)</option><option>Sick Leave (Cuti Sakit)</option><option>Casual Leave (Cuti Pribadi)</option><option>Other Leave</option></select></label>
        <div class="dialog-two">
-         <label>Tanggal Mulai<input name="start" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label>
-         <label>Tanggal Selesai<input name="end" type="date" value="${new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10)}" required /></label>
+         <label>Tanggal Mulai<input name="start" type="date" value="${toLocalISODate(today)}" required /></label>
+         <label>Tanggal Selesai<input name="end" type="date" value="${toLocalISODate(new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2))}" required /></label>
        </div>
        <label>Alasan Cuti<input name="note" required placeholder="mis. Keperluan keluarga mendesak" /></label>`
     ],
@@ -2666,7 +3073,7 @@ function openActionDialog(action, defaultDay = null) {
     'new-payrun': [
       'Siapkan Proses Gaji Baru',
       `<label>Periode Gaji<select name="period"><option>Oktober 2026</option><option>November 2026</option><option>Desember 2026</option></select></label>
-       <label>Tanggal Pembayaran<input name="paymentDate" type="date" value="${new Date().toISOString().slice(0, 10)}" required /></label>
+       <label>Tanggal Pembayaran<input name="paymentDate" type="date" value="${toLocalISODate(today)}" required /></label>
        <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input name="confirm" type="checkbox" required /> Saya mengonfirmasi data absensi &amp; penggajian siap diproses.</label>`
     ]
   }[action];
@@ -2886,14 +3293,13 @@ document.querySelector('#btnSyncSupabase')?.addEventListener('click', async () =
   if (!window.KharismaDB) return;
   showToast('Memulai sinkronisasi data ke Supabase...');
   const res = await window.KharismaDB.syncAll({
-    employees: employeeData,
-    kpis: kpiData,
-    calendar: calendarItems,
-    leave: leaveRequests,
+    isAdmin: isAdmin(),
+    employees: isAdmin() ? employeeData : [],
+    kpis: isAdmin() ? kpiData : kpiData.filter(item => item.dept === getActiveDepartment()),
     getEmployeeId
   });
   if (res.ok) {
-    showToast(`Sinkronisasi Berhasil: ${res.results.employees} karyawan, ${res.results.kpi} KPI, ${res.results.calendar} jadwal disinkronkan.`);
+    showToast(`Sinkronisasi berhasil: ${res.results.employees} karyawan, ${res.results.kpi} KPI. Presensi memakai antrean verifikasi tersendiri.`);
   } else {
     showToast(`Sinkronisasi tertunda: ${res.message}`);
   }
@@ -2902,6 +3308,7 @@ document.querySelector('#btnSyncSupabase')?.addEventListener('click', async () =
 document.querySelector('#profileButton')?.addEventListener('click', () => {
   const dialog = document.querySelector('#userProfileDialog');
   if (!dialog) return;
+  syncActiveProfileFromAccount();
   document.querySelector('#profileDisplayName').textContent = userProfile.name;
   document.querySelector('#profileDisplayEmail').textContent = userProfile.email;
   document.querySelector('#profileInputName').value = userProfile.name;
@@ -2913,16 +3320,50 @@ document.querySelector('#profileButton')?.addEventListener('click', () => {
 
 document.querySelector('#userProfileForm')?.addEventListener('submit', (e) => {
   e.preventDefault();
-  const data = new FormData(e.target);
-  userProfile.name = data.get('userName');
-  userProfile.email = data.get('userEmail');
-  userProfile.role = data.get('userRole');
-  userProfile.department = data.get('userDept');
-  persistUserProfile();
-  document.querySelector('#profileButton strong').textContent = userProfile.name;
+  const data = new FormData(e.currentTarget);
+  const account = getActiveAccount();
+  const oldName = account.name;
+  const oldEmail = account.email;
+  const name = String(data.get('userName') || '').trim();
+  const email = String(data.get('userEmail') || '').trim();
+  if (!name || !email) return showToast('Nama dan email wajib diisi.');
+  if (authenticatedSupabaseSession) {
+    (async () => {
+      const identity = await window.KharismaDB.auth.updateProfile({ name });
+      if (identity.error) return showToast(`Profil gagal diperbarui: ${identity.error.message}`);
+      const profileResult = await window.KharismaSupabase.client.from('user_profiles').update({ full_name: name }).eq('id', authenticatedSupabaseSession.user.id);
+      if (profileResult.error) return showToast(`Profil gagal diperbarui: ${profileResult.error.message}`);
+      userProfile.name = name;
+      userProfile.email = email;
+      account.name = name;
+      persistUserProfile();
+      syncActiveProfileFromAccount();
+      document.querySelector('#userProfileDialog')?.close();
+      showToast('Profil berhasil disimpan ke Supabase.');
+    })();
+    return;
+  }
+  if (userAccounts.some(u => u.id !== account.id && u.email.toLowerCase() === email.toLowerCase())) {
+    return showToast('Email tersebut sudah digunakan akun lain.');
+  }
+  const employee = findEmployeeByName(oldName) || employeeData.find(row => row[1].toLowerCase() === oldEmail.toLowerCase());
+  if (employee && employeeData.some(row => row !== employee && row[1].toLowerCase() === email.toLowerCase())) {
+    return showToast('Email tersebut sudah digunakan karyawan lain.');
+  }
+  if (employee) {
+    employee[0] = name;
+    employee[1] = email;
+    persistEmployeeData();
+    syncEmployeeChange(oldName, oldEmail, { name, email });
+  } else {
+    account.name = name;
+    account.email = email;
+    persistUserAccounts();
+  }
+  syncActiveProfileFromAccount(true);
   const greeting = document.querySelector('.greeting');
   if (greeting && !greeting.classList.contains('inbox-heading')) {
-    greeting.innerHTML = `<span>Hello ${safe(userProfile.name)}!</span><strong>Good Morning</strong>`;
+    greeting.innerHTML = `<span>Halo, ${safe(userProfile.name)}!</span><strong>Selamat Pagi</strong>`;
   }
   document.querySelector('#userProfileDialog')?.close();
   showToast('Profil pengguna berhasil diperbarui.');
@@ -2950,13 +3391,22 @@ document.addEventListener('click', (event) => {
 // 4. Quick Add Employee Form Submit
 document.querySelector('#employeeForm')?.addEventListener('submit', (event) => {
   event.preventDefault();
+  if (!isAdmin()) { showToast('Hanya administrator yang dapat menambahkan karyawan.'); return; }
   const form = event.currentTarget;
   const name = form.elements.name.value.trim();
   const email = form.elements.email.value.trim();
   const dept = form.elements.department.value;
   const title = form.elements.title.value.trim();
+  const workModel = form.elements.workModel.value;
+  const employmentType = form.elements.employmentType.value;
+  if (employeeData.some(row => row[1].toLowerCase() === email.toLowerCase())) {
+    showToast('Email tersebut sudah digunakan karyawan lain.');
+    return;
+  }
   employeeData.unshift([name, email, dept, title, 'On-Time']);
   getEmployeeId(name);
+  employeeProfileOverrides[name] = { ...(employeeProfileOverrides[name] || {}), workModel, employmentType };
+  persistProfileOverrides();
   persistEmployeeData();
   updateEmployeeDatalist();
   form.reset();
@@ -2968,6 +3418,7 @@ document.querySelector('#employeeForm')?.addEventListener('submit', (event) => {
 // 5. Edit Employee Form Submit
 document.querySelector('#editEmployeeForm')?.addEventListener('submit', (event) => {
   event.preventDefault();
+  if (!isAdmin()) { showToast('Hanya administrator yang dapat mengubah data karyawan.'); return; }
   const form = event.currentTarget;
   const originalName = form.elements.originalName.value;
   const name = form.elements.name.value.trim();
@@ -2975,7 +3426,15 @@ document.querySelector('#editEmployeeForm')?.addEventListener('submit', (event) 
   const dept = form.elements.department.value;
   const title = form.elements.title.value.trim();
   const status = form.elements.status.value;
-  const workModel = form.elements.workModel.value;
+  const previousProfile = employeeProfileOverrides[originalName] || {};
+  const workModel = form.elements.workModel?.value || previousProfile.workModel || 'Hybrid';
+  const employmentType = form.elements.employmentType?.value || previousProfile.employmentType || 'Full-Time';
+  const emailConflict = employeeData.some(row => row[0] !== originalName && row[1].toLowerCase() === email.toLowerCase());
+  const accountConflict = userAccounts.some(account => account.name !== originalName && account.email.toLowerCase() === email.toLowerCase());
+  if (emailConflict || accountConflict) {
+    showToast('Email tersebut sudah digunakan karyawan atau akun lain.');
+    return;
+  }
 
   const empIndex = employeeData.findIndex(p => p[0] === originalName);
   let syncInfo = null;
@@ -2985,8 +3444,17 @@ document.querySelector('#editEmployeeForm')?.addEventListener('submit', (event) 
     if (name !== originalName && employeeIdByName.has(originalName)) {
       employeeIdByName.set(name, employeeIdByName.get(originalName));
     }
-    if (!employeeProfileOverrides[name]) employeeProfileOverrides[name] = {};
-    employeeProfileOverrides[name].workModel = workModel;
+    employeeProfileOverrides[name] = {
+      ...previousProfile,
+      gender: form.elements.gender?.value || previousProfile.gender || 'Belum diisi',
+      birthDate: form.elements.birthDate?.value.trim() || previousProfile.birthDate || 'Belum diisi',
+      phone: form.elements.phone?.value.trim() || previousProfile.phone || 'Belum diisi',
+      address: form.elements.address?.value.trim() || previousProfile.address || 'Belum diisi',
+      employmentType,
+      workModel,
+      joinDate: form.elements.joinDate?.value.trim() || previousProfile.joinDate || 'Belum diisi'
+    };
+    if (name !== originalName) delete employeeProfileOverrides[originalName];
     persistProfileOverrides();
     persistEmployeeData();
     syncInfo = syncEmployeeChange(originalName, oldEmail, { name, email, department: dept });
@@ -3008,7 +3476,7 @@ document.querySelector('#actionForm')?.addEventListener('submit', (event) => {
 
   if (activeAction === 'new-event') {
     const timeFormatted = values.time ? new Date(`2000-01-01T${values.time}`).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '09:00 AM';
-    const parsedDate = values.date ? new Date(values.date) : new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedDate);
+    const parsedDate = values.date ? getCalendarItemDate({ date: values.date }, calendarDate) : new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedDate);
     const day = parsedDate.getDate();
     const isoDate = values.date || `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     const newEvent = {
@@ -3025,6 +3493,9 @@ document.querySelector('#actionForm')?.addEventListener('submit', (event) => {
     calendarItems.unshift(newEvent);
     persistCalendarItems();
     selectedDate = day;
+    selectedCalendarEventId = newEvent.id;
+    calendarDate = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1);
+    moduleCalendarDate = new Date(calendarDate);
     openModule('calendar');
     const mName = new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(parsedDate);
     showToast(`Agenda "${values.title}" berhasil dijadwalkan pada tanggal ${day} ${mName}.`);
@@ -3059,9 +3530,16 @@ document.querySelector('#actionForm')?.addEventListener('submit', (event) => {
     openModule('recruitment');
     showToast(`Pelamar baru ${values.name} berhasil didaftarkan ke sistem.`);
   } else if (activeAction === 'new-payrun') {
-    showToast(`Daftar gaji periode ${values.period} siap diproses dan ditransfer pada tanggal ${values.paymentDate}.`);
+    const total = employeeData.reduce((sum, person, index) => sum + (3590 - (index % 6) * 95), 0);
+    payRunData.unshift({ id: `payrun-${Date.now()}`, period: values.period, paymentDate: values.paymentDate, employeeCount: employeeData.length, total, status: 'Siap ditinjau (demo)', createdAt: new Date().toISOString() });
+    persistPayRuns();
+    openModule('payroll');
+    showToast(`Persiapan gaji ${values.period} tersimpan sebagai data demo. Belum ada transfer dana.`);
   } else if (activeAction === 'create-review') {
-    showToast(`Periode penilaian "${values.cycle}" berhasil dibuka.`);
+    reviewCycleData.unshift({ id: `review-${Date.now()}`, name: values.cycle, type: values.type, status: 'Dibuka (demo)', createdAt: new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(new Date()) });
+    persistReviewCycles();
+    openModule('performance');
+    showToast(`Periode penilaian "${values.cycle}" tersimpan sebagai data demo.`);
   }
 
   actionDialog.close();
@@ -3119,9 +3597,9 @@ document.querySelector('#kpiForm')?.addEventListener('submit', (event) => {
   const title = (data.get('title') || '').trim();
   const dept = data.get('dept') || (departmentsData[0]?.name || 'Product Design');
   const pic = (data.get('pic') || '').trim() || userProfile.name;
-  const target = Number(data.get('target')) || 100;
+  const target = Number(data.get('target'));
   const unit = (data.get('unit') || '%').trim();
-  const weight = Number(data.get('weight')) || 20;
+  const weight = Number(data.get('weight'));
   const period = data.get('period') || 'Q2 2035';
   const lowerIsBetter = data.get('lowerIsBetter') === 'true';
 
@@ -3136,7 +3614,7 @@ document.querySelector('#kpiForm')?.addEventListener('submit', (event) => {
     weight,
     period,
     lowerIsBetter,
-    status: 'On-Track',
+    status: 'At Risk',
     notes: 'Target indikator kinerja baru.'
   };
 
@@ -3161,16 +3639,9 @@ document.querySelector('#updateKpiForm')?.addEventListener('submit', (event) => 
     kpi.actual = actual;
     if (notes) kpi.notes = notes;
 
-    let score = 0;
-    if (kpi.lowerIsBetter) {
-      score = (kpi.target / (kpi.actual || 1)) * 100;
-    } else {
-      score = ((kpi.actual || 0) / (kpi.target || 1)) * 100;
-    }
+    const score = calculateKpiScore(kpi);
 
-    if (score >= 100) kpi.status = 'Exceeded';
-    else if (score >= 80) kpi.status = 'On-Track';
-    else kpi.status = 'At Risk';
+    refreshKpiStatus(kpi);
 
     persistKpiData();
     document.querySelector('#updateKpiDialog')?.close();
@@ -3188,10 +3659,10 @@ document.querySelector('#editKpiForm')?.addEventListener('submit', (event) => {
   const title = (data.get('title') || '').trim();
   const dept = data.get('dept');
   const pic = (data.get('pic') || '').trim();
-  const target = Number(data.get('target')) || 100;
+  const target = Number(data.get('target'));
   const actual = Number(data.get('actual')) || 0;
   const unit = (data.get('unit') || '%').trim();
-  const weight = Number(data.get('weight')) || 20;
+  const weight = Number(data.get('weight'));
   const period = data.get('period');
   const lowerIsBetter = data.get('lowerIsBetter') === 'true';
   const notes = (data.get('notes') || '').trim();
@@ -3209,16 +3680,9 @@ document.querySelector('#editKpiForm')?.addEventListener('submit', (event) => {
     kpi.lowerIsBetter = lowerIsBetter;
     kpi.notes = notes;
 
-    let score = 0;
-    if (kpi.lowerIsBetter) {
-      score = (kpi.target / (kpi.actual || 1)) * 100;
-    } else {
-      score = ((kpi.actual || 0) / (kpi.target || 1)) * 100;
-    }
+    const score = calculateKpiScore(kpi);
 
-    if (score >= 100) kpi.status = 'Exceeded';
-    else if (score >= 80) kpi.status = 'On-Track';
-    else kpi.status = 'At Risk';
+    refreshKpiStatus(kpi);
 
     persistKpiData();
     document.querySelector('#editKpiDialog')?.close();
@@ -3310,6 +3774,21 @@ document.querySelector('#userAccountForm')?.addEventListener('submit', (event) =
     return;
   }
 
+  if (authenticatedSupabaseSession) {
+    if (!isAdmin()) return showToast('Hanya administrator yang dapat mengundang akun.');
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    window.KharismaAuth.adminRequest('POST', { name, email, role, department, title })
+      .then(({ data: invited }) => {
+        userAccounts.push({ id: invited.id, name, email, role, department, title, status: 'Active', avatar: 'men/32', lastLogin: 'Undangan dikirim' });
+        form.reset(); document.querySelector('#userAccountDialog')?.close(); openModule('kpi');
+        showToast(`Undangan login berhasil dikirim ke ${email}. Pengguna perlu mengatur kata sandi melalui email.`);
+      })
+      .catch(error => showToast(error.message))
+      .finally(() => { submit.disabled = false; });
+    return;
+  }
+
   const newAccount = {
     id: `usr-${Date.now()}`,
     name,
@@ -3353,6 +3832,22 @@ document.querySelector('#editUserAccountForm')?.addEventListener('submit', (even
   if (usr) {
     const oldName = usr.name;
     const oldEmail = usr.email;
+    if (authenticatedSupabaseSession) {
+      if (!isAdmin()) return showToast('Hanya administrator yang dapat mengubah akun.');
+      const submit = form.querySelector('[type="submit"]'); submit.disabled = true;
+      window.KharismaAuth.adminRequest('PATCH', { id, name, email, role, department, title, status })
+        .then(() => {
+          Object.assign(usr, { name, email, role, department, title, status });
+          const emp = findEmployeeByName(oldName) || employeeData.find(p => p[1].toLowerCase() === oldEmail.toLowerCase());
+          if (emp) { emp[0] = name; emp[1] = email; if (role === 'Supervisor') emp[2] = department; persistEmployeeData(); }
+          if (oldName !== name) syncEmployeeChange(oldName, null, { name });
+          document.querySelector('#editUserAccountDialog')?.close(); openModule('kpi');
+          showToast(`Akun ${name} berhasil diperbarui.`);
+        })
+        .catch(error => showToast(error.message))
+        .finally(() => { submit.disabled = false; });
+      return;
+    }
     usr.name = name;
     usr.email = email;
     usr.role = role;
@@ -3384,9 +3879,10 @@ document.addEventListener('change', (event) => {
   if (event.target.id === 'accountSwitcher') {
     const newId = event.target.value;
     const account = userAccounts.find(u => u.id === newId);
-    if (account) {
+    if (account && account.status === 'Active' && isAdmin()) {
       activeAccountId = newId;
       persistActiveAccount();
+      syncActiveProfileFromAccount(true);
       // Reset KPI tab filters when switching accounts
       if (moduleView) {
         delete moduleView.dataset.kpiDeptFilter;
@@ -3394,7 +3890,10 @@ document.addEventListener('change', (event) => {
         moduleView.dataset.kpiTab = 'kpi-indicators';
       }
       openModule('kpi');
-      showToast(`Sesi aktif: ${account.name} (${account.role}${account.role === 'Supervisor' ? ' — ' + account.department : ''})`);
+      showToast(`Mode simulasi: ${account.name} (${account.role}${account.role === 'Supervisor' ? ' — ' + account.department : ''})`);
+    } else if (account) {
+      event.target.value = activeAccountId;
+      showToast('Hanya administrator yang dapat mengganti akun simulasi.');
     }
   }
 });
@@ -3422,8 +3921,70 @@ document.querySelector('#searchInput')?.addEventListener('input', (event) => {
   }
 });
 
+// Attendance policy and employee self-service forms
+document.addEventListener('submit', async (event) => {
+  const correctionForm = event.target.closest('[data-attendance-correction]');
+  if (correctionForm) {
+    event.preventDefault();
+    const attendanceId = correctionForm.dataset.attendanceId || userAttendanceRecord?.id;
+    if (!attendanceId) { showToast('Koreksi hanya dapat diajukan untuk catatan tersimpan.'); return; }
+    const data = new FormData(correctionForm);
+    const reason = String(data.get('reason') || '').trim();
+    if (!data.get('clockIn') && !data.get('clockOut')) { showToast('Isi jam masuk atau jam pulang yang ingin dikoreksi.'); return; }
+    if (reason.length < 5) { showToast('Alasan koreksi minimal 5 karakter.'); return; }
+    try {
+      await window.KharismaDB.attendance.requestCorrection(attendanceId, { clock_in: data.get('clockIn') || null, clock_out: data.get('clockOut') || null }, reason);
+      correctionForm.reset();
+      showToast('Permintaan koreksi dikirim kepada atasan untuk ditinjau.');
+    } catch (error) { showToast(error.message || 'Permintaan koreksi gagal dikirim.'); }
+    return;
+  }
+  const configForm = event.target.closest('[data-attendance-config]');
+  if (configForm) {
+    event.preventDefault();
+    if (!isAdmin()) { showToast('Hanya admin yang dapat mengubah lokasi kantor dan shift.'); return; }
+    const data = new FormData(configForm);
+    const office = { name: 'Kantor Utama', latitude: Number(data.get('latitude')), longitude: Number(data.get('longitude')), radius_m: Number(data.get('radius')) };
+    const shiftValues = { name: String(data.get('shiftName')).trim(), start_time: data.get('startTime'), end_time: data.get('endTime'), tolerance_minutes: Number(data.get('tolerance') || 0), weekdays: [1,2,3,4,5], enabled: true };
+    if (!Number.isFinite(office.latitude) || !Number.isFinite(office.longitude) || office.latitude < -90 || office.latitude > 90 || office.longitude < -180 || office.longitude > 180 || office.radius_m < 20 || office.radius_m > 5000) { showToast('Koordinat atau radius lokasi kantor tidak valid.'); return; }
+    try {
+      let locationRow = { ...office, id: `local-${Date.now()}` };
+      let shiftRow = { ...shiftValues, id: `local-shift-${Date.now()}` };
+      if (window.KharismaDB?.isConnected && authenticatedSupabaseSession) {
+        locationRow = await window.KharismaDB.attendance.saveOfficeLocation(office);
+        shiftRow = await window.KharismaDB.attendance.saveShift(shiftValues);
+      }
+      const employeeId = String(data.get('employeeId'));
+      if (window.KharismaDB?.isConnected && authenticatedSupabaseSession) await window.KharismaDB.attendance.assignShift(employeeId, shiftRow.id);
+      attendancePolicy.location = locationRow;
+      attendancePolicy.shifts = [shiftRow, ...(attendancePolicy.shifts || []).filter(shift => shift.id !== shiftRow.id)];
+      attendancePolicy.assignments = [...(attendancePolicy.assignments || []).filter(item => item.employee_id !== employeeId), { employee_id: employeeId, shift_id: shiftRow.id }];
+      writeStoredValue('teamhub.attendancePolicy', attendancePolicy);
+      moduleView.innerHTML = pageMarkup('attendance'); setupTablePagination();
+      showToast(window.KharismaDB?.isConnected && authenticatedSupabaseSession ? 'Lokasi, shift, dan penugasan berhasil disimpan.' : 'Kebijakan demo tersimpan di perangkat ini.');
+    } catch (error) { showToast(error.message || 'Pengaturan absensi gagal disimpan.'); }
+    return;
+  }
+  const assignmentForm = event.target.closest('[data-attendance-assignment]');
+  if (assignmentForm) {
+    event.preventDefault();
+    if (userProfile.role !== 'Supervisor' && !isAdmin()) { showToast('Akses penetapan shift ditolak.'); return; }
+    const data = new FormData(assignmentForm), selectedEmployeeId = String(data.get('employeeId')), shiftId = String(data.get('shiftId'));
+    const targetEmployeeIds = selectedEmployeeId === '__department__'
+      ? employeeData.filter(person => person[2] === userProfile.department).map(person => `EMP-${getEmployeeId(person)}`)
+      : [selectedEmployeeId];
+    try {
+      if (window.KharismaDB?.isConnected && authenticatedSupabaseSession) await Promise.all(targetEmployeeIds.map(employeeId => window.KharismaDB.attendance.assignShift(employeeId, shiftId)));
+      const targets = new Set(targetEmployeeIds);
+      attendancePolicy.assignments = [...(attendancePolicy.assignments || []).filter(item => !targets.has(item.employee_id)), ...targetEmployeeIds.map(employee_id => ({ employee_id, shift_id: shiftId }))];
+      writeStoredValue('teamhub.attendancePolicy', attendancePolicy);
+      moduleView.innerHTML = pageMarkup('attendance'); setupTablePagination(); showToast(window.KharismaDB?.isConnected && authenticatedSupabaseSession ? 'Shift karyawan berhasil diperbarui.' : 'Penugasan demo tersimpan di perangkat ini.');
+    } catch (error) { showToast(error.message || 'Penetapan shift gagal.'); }
+  }
+});
+
 // 8. ModuleView delegation listener for all interactive elements
-moduleView.addEventListener('click', (event) => {
+moduleView.addEventListener('click', async (event) => {
   const btn = event.target.closest('button, [data-action], [data-label], th');
   if (!btn) return;
 
@@ -3446,24 +4007,38 @@ moduleView.addEventListener('click', (event) => {
 
   // Edit Employee
   if (action === 'edit-employee') {
+    if (!isAdmin()) { showToast('Hanya administrator yang dapat mengubah data karyawan.'); return; }
     const name = btn.dataset.name;
     const emp = employeeData.find(p => p[0] === name);
     if (!emp) return;
     const dialog = document.querySelector('#editEmployeeDialog');
     const profile = getEmployeeProfile(name);
+    const departmentSelect = document.querySelector('#editEmployeeDepartment');
+    if (departmentSelect) {
+      const departmentOptions = [...new Set([...departmentsData.map(d => d.name), emp[2]])];
+      departmentSelect.innerHTML = departmentOptions.map(department => `<option value="${safe(department)}">${safe(department)}</option>`).join('');
+    }
     document.querySelector('#editEmployeeOriginalName').value = emp[0];
     document.querySelector('#editEmployeeName').value = emp[0];
     document.querySelector('#editEmployeeEmail').value = emp[1];
     document.querySelector('#editEmployeeDepartment').value = emp[2];
     document.querySelector('#editEmployeeTitle').value = emp[3];
     document.querySelector('#editEmployeeStatus').value = emp[4];
-    document.querySelector('#editEmployeeWorkModel').value = profile.workModel;
+    const setEmployeeField = (selector, value) => { const field = document.querySelector(selector); if (field) field.value = value; };
+    setEmployeeField('#editEmployeeWorkModel', profile.workModel);
+    setEmployeeField('#editEmployeeGender', profile.gender);
+    setEmployeeField('#editEmployeeBirthDate', profile.birthDate === 'Belum diisi' ? '' : profile.birthDate);
+    setEmployeeField('#editEmployeePhone', profile.phone === 'Belum diisi' ? '' : profile.phone);
+    setEmployeeField('#editEmployeeAddress', profile.address === 'Belum diisi' ? '' : profile.address);
+    setEmployeeField('#editEmployeeEmploymentType', profile.employmentType);
+    setEmployeeField('#editEmployeeJoinDate', profile.joinDate === 'Belum diisi' ? '' : profile.joinDate);
     dialog.showModal();
     return;
   }
 
   // Delete Employee
   if (action === 'delete-employee') {
+    if (!isAdmin()) { showToast('Hanya administrator yang dapat menghapus karyawan.'); return; }
     const name = btn.dataset.name;
     const links = getEmployeeLinks(name);
     let msg = `Yakin ingin menghapus ${name} dari direktori karyawan?`;
@@ -3475,6 +4050,24 @@ moduleView.addEventListener('click', (event) => {
     if (confirm(msg)) {
       const idx = employeeData.findIndex(p => p[0] === name);
       if (idx >= 0) {
+        const employeeId = `EMP-${getEmployeeId(employeeData[idx])}`;
+        if (authenticatedSupabaseSession && links.users.length && window.KharismaAuth?.adminRequest) {
+          try {
+            for (const account of links.users.filter(item => item.id !== authenticatedSupabaseSession.user.id)) {
+              await window.KharismaAuth.adminRequest('PATCH', { id: account.id, status: 'Inactive' });
+            }
+          } catch (error) {
+            showToast(`Karyawan belum dihapus karena akun terkait gagal dinonaktifkan: ${error.message}`);
+            return;
+          }
+        }
+        let cloudDeleteQueued = false;
+        if (authenticatedSupabaseSession && window.KharismaDB) {
+          await employeeCloudWriteQueue;
+          const result = await window.KharismaDB.employees.delete(employeeId);
+          if (!result?.ok) { showToast(`Karyawan belum dihapus dari cloud: ${result?.error || 'sinkronisasi gagal'}.`); return; }
+          cloudDeleteQueued = Boolean(result.queued);
+        }
         employeeData.splice(idx, 1);
         persistEmployeeData();
         if (links.users.length) {
@@ -3482,7 +4075,7 @@ moduleView.addEventListener('click', (event) => {
           persistUserAccounts();
         }
         updateEmployeeDatalist();
-        showToast(`${name} telah dihapus dari daftar karyawan.${links.users.length ? ' Akun terkait dinonaktifkan.' : ''}`);
+        showToast(`${name} telah dihapus dari daftar karyawan.${cloudDeleteQueued ? ' Penghapusan cloud masuk antrean sinkronisasi.' : ''}${links.users.length ? ' Akun terkait dinonaktifkan.' : ''}`);
         openModule(moduleView.dataset.page || 'employees');
       }
     }
@@ -3498,6 +4091,7 @@ moduleView.addEventListener('click', (event) => {
 
   // Calendar Month Navigation
   if (action === 'prev-cal-month') {
+    selectedCalendarEventId = null;
     calendarDate.setMonth(calendarDate.getMonth() - 1);
     openModule('calendar');
     renderDashboardMiniCalendar();
@@ -3507,6 +4101,7 @@ moduleView.addEventListener('click', (event) => {
   }
 
   if (action === 'next-cal-month') {
+    selectedCalendarEventId = null;
     calendarDate.setMonth(calendarDate.getMonth() + 1);
     openModule('calendar');
     renderDashboardMiniCalendar();
@@ -3519,6 +4114,7 @@ moduleView.addEventListener('click', (event) => {
   if (action === 'pick-calendar-day') {
     const day = Number(btn.dataset.day);
     selectedDate = day;
+    selectedCalendarEventId = null;
     moduleView.querySelectorAll('.calendar-cell').forEach(cell => cell.classList.remove('active-date'));
     btn.closest('.calendar-cell')?.classList.add('active-date');
     const monthName = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(calendarDate);
@@ -3536,6 +4132,7 @@ moduleView.addEventListener('click', (event) => {
   if (action === 'open-agenda-event') {
     const day = Number(btn.dataset.day) || selectedDate;
     const title = btn.dataset.title;
+    selectedCalendarEventId = btn.dataset.id || null;
     selectedDate = day;
     moduleView.querySelectorAll('.calendar-cell').forEach(cell => cell.classList.remove('active-date'));
     btn.closest('.calendar-cell')?.classList.add('active-date');
@@ -3543,7 +4140,7 @@ moduleView.addEventListener('click', (event) => {
     const heading = moduleView.querySelector('#selectedScheduleDate');
     if (heading) heading.textContent = `${day} ${monthName}`;
     const detailsContainer = moduleView.querySelector('#calendarDetailsList');
-    if (detailsContainer) detailsContainer.innerHTML = getCalendarScheduleCards(day);
+    if (detailsContainer) detailsContainer.innerHTML = getCalendarScheduleCards(day, selectedCalendarEventId);
     renderDashboardMiniCalendar();
     renderDashboardScheduleList(day);
     showToast(`Detail agenda: ${title} (${day} ${monthName})`);
@@ -3555,6 +4152,7 @@ moduleView.addEventListener('click', (event) => {
     const id = btn.dataset.id;
     const idx = calendarItems.findIndex(item => item.id === id);
     if (idx >= 0) {
+      if (String(selectedCalendarEventId) === String(id)) selectedCalendarEventId = null;
       calendarItems.splice(idx, 1);
       persistCalendarItems();
       openModule('calendar');
@@ -3675,6 +4273,7 @@ moduleView.addEventListener('click', (event) => {
 
   // Add Candidate / Event / Payrun / Review dialogs
   if (['new-event', 'request-leave', 'add-candidate', 'create-review', 'new-payrun'].includes(action)) {
+    if (action === 'new-payrun' && !isAdmin()) { showToast('Hanya administrator yang dapat menyiapkan proses gaji.'); return; }
     openActionDialog(action);
     return;
   }
@@ -3709,37 +4308,23 @@ moduleView.addEventListener('click', (event) => {
     return;
   }
 
+  if (action === 'attendance-transition') { await performAttendanceTransition(btn.dataset.transition); return; }
+  if (action === 'attendance-review-correction' || action === 'attendance-review-overtime') {
+    if (!isAdmin() && userProfile.role !== 'Supervisor') { showToast('Anda tidak memiliki akses persetujuan.'); return; }
+    try {
+      if (action === 'attendance-review-correction') await window.KharismaDB.attendance.reviewCorrection(btn.dataset.id, btn.dataset.decision, 'Ditinjau melalui aplikasi');
+      else await window.KharismaDB.attendance.reviewOvertime(btn.dataset.id, btn.dataset.decision === 'true');
+      attendanceReviewQueue = await window.KharismaDB.attendance.getReviewQueue();
+      cloudAttendanceRecords = await window.KharismaDB.attendance.getAll();
+      moduleView.innerHTML = pageMarkup('attendance'); setupTablePagination();
+      showToast('Keputusan persetujuan berhasil disimpan.');
+    } catch (error) { showToast(error.message || 'Keputusan tidak dapat disimpan.'); }
+    return;
+  }
   if (action === 'clock-in') {
-    const isClocked = userAttendanceRecord && userAttendanceRecord.clockedIn;
-    const now = new Date();
-    const timeStr = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) + ' WIB';
-    const hours = now.getHours();
-    const mins = now.getMinutes();
-    const isLate = hours > 9 || (hours === 9 && mins > 15);
-    const lateMins = isLate ? (hours === 9 ? mins - 15 : (hours - 9) * 60 + mins - 15) : 0;
-
-    if (!isClocked) {
-      userAttendanceRecord = {
-        clockedIn: true,
-        clockIn: timeStr,
-        clockOut: '',
-        date: '19 Jun 2035',
-        workModel: 'Di Kantor',
-        duration: 'Sedang Berjalan',
-        overtime: isLate ? `${lateMins}m Terlambat` : '—',
-        status: isLate ? 'Late' : 'On-Time'
-      };
-      persistUserAttendance();
-      openModule('attendance');
-      showToast(`Presensi masuk Davis Levin (Anda) berhasil dicatat pada ${timeStr} (${userAttendanceRecord.status}). Total Hadir bertambah!`);
-    } else {
-      userAttendanceRecord.clockedIn = false;
-      userAttendanceRecord.clockOut = timeStr;
-      userAttendanceRecord.duration = '8h 15m';
-      persistUserAttendance();
-      openModule('attendance');
-      showToast(`Presensi pulang Davis Levin (Anda) berhasil dicatat pada ${timeStr}. Terima kasih atas kerja keras Anda!`);
-    }
+    const date = attendanceTodayKey();
+    const state = userAttendanceRecord && (userAttendanceRecord.dateKey === date || isActiveOvernightAttendance(userAttendanceRecord)) ? userAttendanceRecord.state : null;
+    await performAttendanceTransition(!state ? 'clock_in' : state === 'on_break' ? 'break_end' : state === 'working' ? 'clock_out' : 'clock_in');
     return;
   }
 
@@ -3948,15 +4533,24 @@ moduleView.addEventListener('click', (event) => {
   }
 
   if (action === 'delete-kpi') {
+    const targetKpi = kpiData.find(item => item.id === btn.dataset.id);
+    if (!isAdmin() && targetKpi?.dept !== getActiveDepartment()) { showToast('Anda hanya dapat menghapus KPI divisi sendiri.'); return; }
     const id = btn.dataset.id;
     const idx = kpiData.findIndex(k => k.id === id);
     if (idx >= 0) {
       const title = kpiData[idx].title;
       if (confirm(`Yakin ingin menghapus target KPI "${title}"?`)) {
+        let cloudDeleteQueued = false;
+        if (authenticatedSupabaseSession && window.KharismaDB) {
+          await kpiCloudWriteQueue;
+          const result = await window.KharismaDB.kpi.delete(id);
+          if (!result?.ok) { showToast(`KPI belum dihapus dari cloud: ${result?.error || 'sinkronisasi gagal'}.`); return; }
+          cloudDeleteQueued = Boolean(result.queued);
+        }
         kpiData.splice(idx, 1);
         persistKpiData();
         openModule('kpi');
-        showToast(`Target KPI "${title}" berhasil dihapus.`);
+        showToast(`Target KPI "${title}" berhasil dihapus.${cloudDeleteQueued ? ' Penghapusan cloud masuk antrean sinkronisasi.' : ''}`);
       }
     }
     return;
@@ -3997,12 +4591,7 @@ moduleView.addEventListener('click', (event) => {
   if (action === 'export-kpi') {
     const headers = ['ID', 'Indikator KPI', 'Departemen', 'PIC', 'Periode', 'Bobot (%)', 'Target', 'Satuan', 'Realisasi Terkini', 'Capaian (%)', 'Status', 'Catatan Progres'];
     const rows = kpiData.map(k => {
-      let score = 0;
-      if (k.lowerIsBetter) {
-        score = (k.target / (k.actual || 1)) * 100;
-      } else {
-        score = ((k.actual || 0) / (k.target || 1)) * 100;
-      }
+      const score = calculateKpiScore(k);
       const scoreFormatted = Math.round(score * 10) / 10;
       return [
         k.id,
@@ -4062,8 +4651,8 @@ moduleView.addEventListener('click', (event) => {
 
   if (action === 'delete-user-account') {
     const id = btn.dataset.id;
-    if (id === 'usr-admin') {
-      showToast('Akun Administrator utama tidak dapat dihapus.');
+    if (id === 'usr-admin' || id === authenticatedSupabaseSession?.user?.id) {
+      showToast(id === authenticatedSupabaseSession?.user?.id ? 'Akun yang sedang digunakan tidak dapat dinonaktifkan.' : 'Akun Administrator utama tidak dapat dihapus.');
       return;
     }
     if (id === activeAccountId) {
@@ -4072,6 +4661,12 @@ moduleView.addEventListener('click', (event) => {
     }
     const usr = userAccounts.find(u => u.id === id);
     if (usr && confirm(`Yakin ingin menghapus akun pengguna "${usr.name}" (${usr.role})?`)) {
+      if (authenticatedSupabaseSession) {
+        window.KharismaAuth.adminRequest('PATCH', { id, status: 'Inactive' })
+          .then(() => { usr.status = 'Inactive'; openModule('kpi'); showToast(`Akun ${usr.name} dinonaktifkan dan sesi login diblokir.`); })
+          .catch(error => showToast(error.message));
+        return;
+      }
       const idx = userAccounts.findIndex(u => u.id === id);
       if (idx >= 0) {
         userAccounts.splice(idx, 1);
@@ -4109,10 +4704,13 @@ moduleView.addEventListener('click', (event) => {
   // Export Attendance CSV
   if (action === 'export-attendance') {
     const headers = ['Nama', 'Jabatan', 'Tanggal', 'Model Kerja', 'Jam Kerja', 'Durasi', 'Lembur', 'Status'];
-    const curDateStr = new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date());
-    const rows = employeeData.map(p => [
-      p[0], p[3], curDateStr, 'Hybrid', p[4] === 'On-Time' ? '08:55 - 17:05' : '—', '8h 10m', '—', p[4]
-    ]);
+    const source = Array.isArray(cloudAttendanceRecords) ? cloudAttendanceRecords : (userAttendanceRecord ? [userAttendanceRecord] : []);
+    const rows = source.map(record => {
+      const employee = employeeData.find(person => person[1]?.toLowerCase() === String(record.employee_name || record.name || '').toLowerCase());
+      const rawDate = String(record.date || record.dateKey || attendanceTodayKey());
+      const date = new Date(`${rawDate.slice(0,10)}T00:00:00+07:00`);
+      return [record.employee_name || record.name || userProfile.name, employee?.[3] || 'Karyawan', new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(date), record.work_model || record.workModel || '—', `${record.clock_in || record.clockIn || '—'} - ${record.clock_out || record.clockOut || 'Belum pulang'}`, record.duration || '—', record.overtime || '—', record.state && record.state !== 'completed' ? 'Belum Lengkap' : ({ 'On-Time': 'Tepat Waktu', Late: 'Terlambat', 'On Leave': 'Cuti', Absent: 'Tidak Hadir' }[record.status] || record.status || '—')];
+    });
     downloadCsv('laporan-kehadiran-kharisma-hub.csv', [headers, ...rows]);
     return;
   }
@@ -4148,6 +4746,7 @@ moduleView.addEventListener('click', (event) => {
     const allMails = [...inboxData, ...sentMail, ...draftMail, ...archivedMail, ...trashedMail];
     const target = allMails.find(m => String(m.id) === String(selectedMailId));
     if (target) target.unread = false;
+    persistMailbox();
     renderInboxPage();
     return;
   }
@@ -4159,6 +4758,7 @@ moduleView.addEventListener('click', (event) => {
     const target = allMails.find(m => String(m.id) === String(id));
     if (target) {
       target.starred = !target.starred;
+      persistMailbox();
       btn.classList.toggle('starred', target.starred);
       showToast(target.starred ? 'Pesan ditandai bintang.' : 'Tanda bintang dihapus.');
     }
@@ -4172,6 +4772,7 @@ moduleView.addEventListener('click', (event) => {
       const [msg] = inboxData.splice(idx, 1);
       archivedMail.unshift(msg);
     }
+    persistMailbox();
     const next = visibleMail()[0];
     if (next) selectedMailId = next.id;
     renderInboxPage();
@@ -4186,6 +4787,7 @@ moduleView.addEventListener('click', (event) => {
       const [msg] = inboxData.splice(idx, 1);
       trashedMail.unshift(msg);
     }
+    persistMailbox();
     const next = visibleMail()[0];
     if (next) selectedMailId = next.id;
     renderInboxPage();
@@ -4201,7 +4803,24 @@ moduleView.addEventListener('click', (event) => {
 
   // Mail more options
   if (action === 'mail-more') {
-    showToast('Opsi pesan: Tandai belum dibaca, pindahkan label, atau unduh berkas pesan.');
+    const message = [...inboxData, ...sentMail, ...draftMail, ...archivedMail, ...trashedMail, ...spamMail].find(item => String(item.id) === String(selectedMailId));
+    if (!message) { showToast('Pilih pesan terlebih dahulu.'); return; }
+    const choice = window.prompt('Opsi pesan:\n1. Tandai belum dibaca/dibaca\n2. Ubah label\n3. Unduh pesan (.txt)');
+    if (choice === '1') {
+      message.unread = !message.unread;
+      persistMailbox(); renderInboxPage();
+      showToast(message.unread ? 'Pesan ditandai belum dibaca.' : 'Pesan ditandai sudah dibaca.');
+    } else if (choice === '2') {
+      const label = window.prompt('Masukkan label: HR, Leave Requests, Interview, atau Admin Notes', message.label || 'HR');
+      if (label && ['HR', 'Leave Requests', 'Interview', 'Admin Notes'].includes(label)) {
+        message.label = label; persistMailbox(); renderInboxPage(); showToast(`Label pesan diubah menjadi ${label}.`);
+      } else if (label) showToast('Label tidak dikenal.');
+    } else if (choice === '3') {
+      const content = [`Dari: ${message.from} <${message.email}>`, `Tanggal: ${message.date} ${message.time}`, `Subjek: ${message.subject}`, '', ...(message.body || [])].join('\n');
+      const url = URL.createObjectURL(new Blob([content], { type: 'text/plain;charset=utf-8' }));
+      const link = document.createElement('a'); link.href = url; link.download = `${String(message.subject || 'pesan').replace(/[^\p{L}\p{N}-]+/gu, '-')}.txt`; link.click(); URL.revokeObjectURL(url);
+      showToast('Pesan diunduh sebagai berkas teks.');
+    }
     return;
   }
 
@@ -4322,6 +4941,7 @@ moduleView.addEventListener('click', (event) => {
         starred: false
       };
       draftMail.unshift(newDraft);
+      persistMailbox();
       showToast('Draf pesan berhasil disimpan.');
     }
     return;
@@ -4329,6 +4949,8 @@ moduleView.addEventListener('click', (event) => {
 
   // Delete Draft
   if (action === 'delete-draft') {
+    const draftIndex = draftMail.findIndex(mail => String(mail.id) === String(selectedMailId));
+    if (draftIndex >= 0) { draftMail.splice(draftIndex, 1); persistMailbox(); renderInboxPage(); showToast('Draf dihapus.'); return; }
     const composer = moduleView.querySelector('#mailComposer');
     if (composer) {
       const bodyEl = composer.querySelector('.compose-body');
@@ -4434,8 +5056,8 @@ moduleView.addEventListener('click', (event) => {
       else if (colIndex === 4) { valA = Number(a.target) || 0; valB = Number(b.target) || 0; }
       else if (colIndex === 5) { valA = Number(a.actual) || 0; valB = Number(b.actual) || 0; }
       else if (colIndex === 6) {
-        valA = a.lowerIsBetter ? (a.target / (a.actual || 1)) : (a.actual || 0) / (a.target || 1);
-        valB = b.lowerIsBetter ? (b.target / (b.actual || 1)) : (b.actual || 0) / (b.target || 1);
+        valA = calculateKpiScore(a);
+        valB = calculateKpiScore(b);
       }
       else if (colIndex === 7) { valA = a.status; valB = b.status; }
       else return 0;
@@ -4497,6 +5119,7 @@ moduleView.addEventListener('change', (event) => {
 moduleView.addEventListener('submit', (event) => {
   if (event.target.id === 'employeePageForm') {
     event.preventDefault();
+    if (!isAdmin()) { showToast('Hanya administrator yang dapat menambahkan karyawan.'); return; }
     const data = new FormData(event.target);
     const name = `${data.get('firstName')?.trim() || ''} ${data.get('lastName')?.trim() || ''}`.trim() || 'New Employee';
     const email = data.get('email')?.trim() || `${name.toLowerCase().replace(/\s+/g, '.')}@kharismahub.com`;
@@ -4534,8 +5157,9 @@ moduleView.addEventListener('submit', (event) => {
       starred: false
     };
     sentMail.unshift(newSent);
+    persistMailbox();
     if (bodyEl) bodyEl.innerHTML = '';
-    showToast(`Email berhasil dikirim ke ${to}`);
+    showToast(`Pesan tersimpan di folder Terkirim (demo lokal). Belum dikirim kepada ${to}.`);
     return;
   }
 });
@@ -4853,7 +5477,19 @@ function setupDashboardControls() {
     const kebab = event.target.closest('.kebab');
     if (kebab) {
       event.stopPropagation();
-      showToast('Menu opsi dibuka.');
+      const choice = window.prompt('Menu opsi:\n1. Ekspor tabel ke CSV\n2. Cetak halaman\n3. Muat ulang tampilan');
+      if (choice === '1') {
+        const table = kebab.closest('.module-card')?.querySelector('table') || moduleView?.querySelector('table');
+        if (!table) { showToast('Tidak ada tabel pada bagian ini untuk diekspor.'); return; }
+        const rows = [...table.querySelectorAll('tr')].map(row => [...row.querySelectorAll('th,td')].map(cell => cell.innerText.trim()));
+        const page = moduleView?.dataset.page || 'laporan';
+        downloadCsv(`${page}-export.csv`, rows);
+      } else if (choice === '2') {
+        window.print();
+      } else if (choice === '3') {
+        const page = moduleView?.dataset.page;
+        if (page) openModule(page);
+      }
     }
   });
 }
@@ -4866,6 +5502,11 @@ function setupDashboardControls() {
 document.addEventListener('submit', (event) => {
   const form = event.target;
   if (!form || !form.id) return;
+
+  // These static dialogs already have dedicated submit handlers above. Letting
+  // the event bubble into this delegated fallback submitted the same records a
+  // second time (often with the now-reset form values).
+  if (['employeeForm', 'editEmployeeForm', 'actionForm', 'kpiForm', 'updateKpiForm', 'editKpiForm', 'divisionForm', 'editDivisionForm', 'userAccountForm', 'editUserAccountForm'].includes(form.id)) return;
 
   // 1. Employee Form
   if (form.id === 'employeeForm') {
@@ -4936,7 +5577,7 @@ document.addEventListener('submit', (event) => {
 
     if (activeAction === 'new-event') {
       const timeFormatted = values.time ? new Date(`2000-01-01T${values.time}`).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) : '09:00 AM';
-      const parsedDate = values.date ? new Date(values.date) : new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedDate);
+      const parsedDate = values.date ? getCalendarItemDate({ date: values.date }, calendarDate) : new Date(calendarDate.getFullYear(), calendarDate.getMonth(), selectedDate);
       const day = parsedDate.getDate();
       const isoDate = values.date || `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       const newEvent = {
@@ -4953,6 +5594,8 @@ document.addEventListener('submit', (event) => {
       calendarItems.unshift(newEvent);
       persistCalendarItems();
       selectedDate = day;
+      calendarDate = new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1);
+      moduleCalendarDate = new Date(calendarDate);
       openModule('calendar');
       const mName = new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(parsedDate);
       showToast(`Agenda "${values.title}" berhasil dijadwalkan pada tanggal ${day} ${mName}.`);
@@ -4987,9 +5630,16 @@ document.addEventListener('submit', (event) => {
       openModule('recruitment');
       showToast(`Pelamar baru ${values.name} berhasil didaftarkan ke sistem.`);
     } else if (activeAction === 'new-payrun') {
-      showToast(`Daftar gaji periode ${values.period} siap diproses dan ditransfer pada tanggal ${values.paymentDate}.`);
+      const total = employeeData.reduce((sum, person, index) => sum + (3590 - (index % 6) * 95), 0);
+      payRunData.unshift({ id: `payrun-${Date.now()}`, period: values.period, paymentDate: values.paymentDate, employeeCount: employeeData.length, total, status: 'Siap ditinjau (demo)', createdAt: new Date().toISOString() });
+      persistPayRuns();
+      openModule('payroll');
+      showToast(`Persiapan gaji ${values.period} tersimpan sebagai data demo. Belum ada transfer dana.`);
     } else if (activeAction === 'create-review') {
-      showToast(`Periode penilaian "${values.cycle}" berhasil dibuka.`);
+      reviewCycleData.unshift({ id: `review-${Date.now()}`, name: values.cycle, type: values.type, status: 'Dibuka (demo)', createdAt: new Intl.DateTimeFormat('id-ID', { dateStyle: 'medium' }).format(new Date()) });
+      persistReviewCycles();
+      openModule('performance');
+      showToast(`Periode penilaian "${values.cycle}" tersimpan sebagai data demo.`);
     }
 
     document.querySelector('#actionDialog')?.close();
@@ -5004,9 +5654,9 @@ document.addEventListener('submit', (event) => {
     const title = (data.get('title') || '').trim();
     const dept = data.get('dept') || (departmentsData[0]?.name || 'Product Design');
     const pic = (data.get('pic') || '').trim() || userProfile.name;
-    const target = Number(data.get('target')) || 100;
+    const target = Number(data.get('target'));
     const unit = (data.get('unit') || '%').trim();
-    const weight = Number(data.get('weight')) || 20;
+    const weight = Number(data.get('weight'));
     const period = data.get('period') || 'Q2 2035';
     const lowerIsBetter = data.get('lowerIsBetter') === 'true';
 
@@ -5021,7 +5671,7 @@ document.addEventListener('submit', (event) => {
       weight,
       period,
       lowerIsBetter,
-      status: 'On-Track',
+      status: 'At Risk',
       notes: 'Target indikator kinerja baru.'
     };
 
@@ -5046,10 +5696,7 @@ document.addEventListener('submit', (event) => {
     if (kpi) {
       kpi.actual = actual;
       if (notes) kpi.notes = notes;
-      let score = kpi.lowerIsBetter ? (kpi.target / (kpi.actual || 1)) * 100 : ((kpi.actual || 0) / (kpi.target || 1)) * 100;
-      if (score >= 100) kpi.status = 'Exceeded';
-      else if (score >= 80) kpi.status = 'On-Track';
-      else kpi.status = 'At Risk';
+      const score = refreshKpiStatus(kpi);
       persistKpiData();
       document.querySelector('#updateKpiDialog')?.close();
       openModule('kpi');
@@ -5068,18 +5715,15 @@ document.addEventListener('submit', (event) => {
       kpi.title = (data.get('title') || '').trim() || kpi.title;
       kpi.dept = data.get('dept') || kpi.dept;
       kpi.pic = (data.get('pic') || '').trim() || kpi.pic;
-      kpi.target = Number(data.get('target')) || kpi.target;
-      kpi.actual = Number(data.get('actual')) || kpi.actual;
+      kpi.target = Number(data.get('target'));
+      kpi.actual = Number(data.get('actual'));
       kpi.unit = (data.get('unit') || '%').trim();
-      kpi.weight = Number(data.get('weight')) || kpi.weight;
+      kpi.weight = Number(data.get('weight'));
       kpi.period = data.get('period') || kpi.period;
       kpi.lowerIsBetter = data.get('lowerIsBetter') === 'true';
       kpi.notes = (data.get('notes') || '').trim();
 
-      let score = kpi.lowerIsBetter ? (kpi.target / (kpi.actual || 1)) * 100 : ((kpi.actual || 0) / (kpi.target || 1)) * 100;
-      if (score >= 100) kpi.status = 'Exceeded';
-      else if (score >= 80) kpi.status = 'On-Track';
-      else kpi.status = 'At Risk';
+      refreshKpiStatus(kpi);
 
       persistKpiData();
       document.querySelector('#editKpiDialog')?.close();
@@ -5237,4 +5881,3 @@ updateNotificationBadge();
 setupDashboardControls();
 const { key: initialKey, params: initialParams } = resolveRoute();
 openModule(initialKey, false, Object.fromEntries(initialParams.entries()));
-

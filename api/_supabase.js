@@ -1,6 +1,7 @@
 // Kharisma Hub HR Management — Serverless Supabase & Fallback Data Helper
 export const SUPABASE_URL = process.env.SUPABASE_URL || 'https://wirgqezinegebauddmgy.supabase.co';
-export const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+// Public data APIs must always respect RLS. The service key is restricted to api/_auth.js.
+export const SUPABASE_KEY = process.env.SUPABASE_ANON_KEY || '';
 
 export const defaultData = {
   employees: [
@@ -47,13 +48,14 @@ export async function querySupabase(endpoint, options = {}) {
   }
   try {
     const url = `${SUPABASE_URL}/rest/v1/${endpoint}`;
+    const { accessToken, ...fetchOptions } = options;
     const headers = {
       'apikey': SUPABASE_KEY,
-      'Authorization': `Bearer ${SUPABASE_KEY}`,
+      'Authorization': `Bearer ${accessToken || SUPABASE_KEY}`,
       'Content-Type': 'application/json',
-      ...options.headers
+      ...fetchOptions.headers
     };
-    const response = await fetch(url, { ...options, headers });
+    const response = await fetch(url, { ...fetchOptions, headers });
     if (!response.ok) {
       const errText = await response.text();
       return { ok: false, error: errText, status: response.status };

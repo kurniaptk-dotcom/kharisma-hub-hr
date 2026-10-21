@@ -151,30 +151,28 @@ alter table public.departments enable row level security;
 alter table public.applicants enable row level security;
 alter table public.system_settings enable row level security;
 
--- Allow anonymous / authenticated read and write for web app usage
-create policy "Allow all read on employees" on public.employees for select using (true);
-create policy "Allow all write on employees" on public.employees for all using (true) with check (true);
+-- Remove legacy permissive policies even when this setup file is rerun against
+-- a database that was previously initialized with the demo configuration.
+drop policy if exists "Allow all read on employees" on public.employees;
+drop policy if exists "Allow all write on employees" on public.employees;
+drop policy if exists "Allow all read on attendance" on public.attendance_records;
+drop policy if exists "Allow all write on attendance" on public.attendance_records;
+drop policy if exists "Allow all read on leave" on public.leave_requests;
+drop policy if exists "Allow all write on leave" on public.leave_requests;
+drop policy if exists "Allow all read on kpi" on public.kpi_indicators;
+drop policy if exists "Allow all write on kpi" on public.kpi_indicators;
+drop policy if exists "Allow all read on calendar" on public.calendar_events;
+drop policy if exists "Allow all write on calendar" on public.calendar_events;
+drop policy if exists "Allow all read on departments" on public.departments;
+drop policy if exists "Allow all write on departments" on public.departments;
+drop policy if exists "Allow all read on applicants" on public.applicants;
+drop policy if exists "Allow all write on applicants" on public.applicants;
+drop policy if exists "Allow all read on settings" on public.system_settings;
+drop policy if exists "Allow all write on settings" on public.system_settings;
 
-create policy "Allow all read on attendance" on public.attendance_records for select using (true);
-create policy "Allow all write on attendance" on public.attendance_records for all using (true) with check (true);
-
-create policy "Allow all read on leave" on public.leave_requests for select using (true);
-create policy "Allow all write on leave" on public.leave_requests for all using (true) with check (true);
-
-create policy "Allow all read on kpi" on public.kpi_indicators for select using (true);
-create policy "Allow all write on kpi" on public.kpi_indicators for all using (true) with check (true);
-
-create policy "Allow all read on calendar" on public.calendar_events for select using (true);
-create policy "Allow all write on calendar" on public.calendar_events for all using (true) with check (true);
-
-create policy "Allow all read on departments" on public.departments for select using (true);
-create policy "Allow all write on departments" on public.departments for all using (true) with check (true);
-
-create policy "Allow all read on applicants" on public.applicants for select using (true);
-create policy "Allow all write on applicants" on public.applicants for all using (true) with check (true);
-
-create policy "Allow all read on settings" on public.system_settings for select using (true);
-create policy "Allow all write on settings" on public.system_settings for all using (true) with check (true);
+-- No permissive policies are created here. Run auth-hardening.sql immediately
+-- after this file to install role-aware policies. With RLS enabled and no
+-- policies, access stays denied until that step is completed.
 
 -- ============================================================================
 -- SEED INITIAL DATA

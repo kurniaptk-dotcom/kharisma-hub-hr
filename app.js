@@ -610,13 +610,13 @@ function persistCalendarItems() {
    ========================================================================== */
 
 const defaultLeaveRequests = [
-  { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2035', period: '20“22 Jun 2035', duration: '3 Days', reason: 'Doctor's note attached', status: 'Approved' },
-  { id: 'lv-2', name: 'Jacob Yuen', title: 'Site Supervisor', type: 'Annual Leave', submitDate: '10 Jun 2035', period: '17“21 Jun 2035', duration: '5 Days', reason: 'Family trip', status: 'Approved' },
+  { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2035', period: '20—22 Jun 2035', duration: '3 Days', reason: 'Doctor's note attached', status: 'Approved' },
+  { id: 'lv-2', name: 'Jacob Yuen', title: 'Site Supervisor', type: 'Annual Leave', submitDate: '10 Jun 2035', period: '17—21 Jun 2035', duration: '5 Days', reason: 'Family trip', status: 'Approved' },
   { id: 'lv-3', name: 'Anya Rodriguez', title: 'Graphic Designer', type: 'Other Leave', submitDate: '17 Jun 2035', period: '19 Jun 2035', duration: '1 Day', reason: 'Personal matter', status: 'Pending' },
-  { id: 'lv-4', name: 'Olivia Mason', title: 'Marketing', type: 'Annual Leave', submitDate: '02 Jun 2035', period: '05“07 Jun 2035', duration: '3 Days', reason: 'Conference attendance', status: 'Approved' },
-  { id: 'lv-5', name: 'Sara Kim', title: 'Customer Support', type: 'Sick Leave', submitDate: '14 Jun 2035', period: '15“16 Jun 2035', duration: '2 Days', reason: 'Fever', status: 'Approved' },
-  { id: 'lv-6', name: 'Daniel Cheung', title: 'Compliance Specialist', type: 'Annual Leave', submitDate: '01 Jun 2035', period: '10“12 Jun 2035', duration: '3 Days', reason: 'Holiday', status: 'Pending' },
-  { id: 'lv-7', name: 'Mia Torres', title: 'HR Officer', type: 'Annual Leave', submitDate: '06 Jun 2035', period: '09“10 Jun 2035', duration: '2 Days', reason: 'Personal retreat', status: 'Approved' },
+  { id: 'lv-4', name: 'Olivia Mason', title: 'Marketing', type: 'Annual Leave', submitDate: '02 Jun 2035', period: '05—07 Jun 2035', duration: '3 Days', reason: 'Conference attendance', status: 'Approved' },
+  { id: 'lv-5', name: 'Sara Kim', title: 'Customer Support', type: 'Sick Leave', submitDate: '14 Jun 2035', period: '15—16 Jun 2035', duration: '2 Days', reason: 'Fever', status: 'Approved' },
+  { id: 'lv-6', name: 'Daniel Cheung', title: 'Compliance Specialist', type: 'Annual Leave', submitDate: '01 Jun 2035', period: '10—12 Jun 2035', duration: '3 Days', reason: 'Holiday', status: 'Pending' },
+  { id: 'lv-7', name: 'Mia Torres', title: 'HR Officer', type: 'Annual Leave', submitDate: '06 Jun 2035', period: '09—10 Jun 2035', duration: '2 Days', reason: 'Personal retreat', status: 'Approved' },
   { id: 'lv-8', name: 'Ethan Ray', title: 'UI Designer', type: 'Casual Leave', submitDate: '05 Jun 2035', period: '07 Jun 2035', duration: '1 Day', reason: 'Family event', status: 'Rejected' },
   { id: 'lv-9', name: 'Farah Nabila', title: 'Customer Experience Lead', type: 'Sick Leave', submitDate: '11 Jun 2035', period: '12 Jun 2035', duration: '1 Day', reason: 'Headache', status: 'Approved' },
   { id: 'lv-10', name: 'Kelvin Yu', title: 'Training Coordinator', type: 'Other Leave', submitDate: '13 Jun 2035', period: '14 Jun 2035', duration: '1 Day', reason: 'Volunteer program', status: 'Rejected' }
@@ -770,7 +770,7 @@ function syncActiveProfileFromAccount(persist = false) {
 }
 syncActiveProfileFromAccount();
 
-/* Cross-module sync: Employee directory â†— KPI PIC â†— Division Head â†— User Accounts */
+/* Cross-module sync: Employee directory ↗ KPI PIC ↗ Division Head ↗ User Accounts */
 function findEmployeeByName(name) {
   const key = String(name || '').trim().toLowerCase();
   return employeeData.find(p => p[0].toLowerCase() === key) || null;
@@ -824,7 +824,7 @@ function getEmployeeLinks(name) {
    ========================================================================== */
 
 const inboxData = [
-  { id: 1, from: 'Olivia Mason', email: 'olivia.mason@company.com', subject: 'Leave Request Approval', preview: "Hi, I'd like to follow up on my annual leave request for next month, from July 15 to July 19.", time: '10:24 AM', date: '19 Jun', initials: 'OM', color: 'p1', label: 'Leave Requests', body: ["Hi there,", "I'd like to follow up on my annual leave request for the dates 15“19 July.", 'The request is still marked as pending, and I wanted to confirm if any additional documents are needed.', 'Please let me know if you need anything else from my side.', 'Thanks so much!', '— Olivia'], unread: true, starred: false },
+  { id: 1, from: 'Olivia Mason', email: 'olivia.mason@company.com', subject: 'Leave Request Approval', preview: "Hi, I'd like to follow up on my annual leave request for next month, from July 15 to July 19.", time: '10:24 AM', date: '19 Jun', initials: 'OM', color: 'p1', label: 'Leave Requests', body: ["Hi there,", "I'd like to follow up on my annual leave request for the dates 15—19 July.", 'The request is still marked as pending, and I wanted to confirm if any additional documents are needed.', 'Please let me know if you need anything else from my side.', 'Thanks so much!', '— Olivia'], unread: true, starred: false },
   { id: 2, from: 'Ethan Ray', email: 'ethan.ray@company.com', subject: 'Updated Contact Info', preview: "Just a quick heads-up that I've updated my emergency contact details on my profile.", time: '09:40 AM', date: '19 Jun', initials: 'ER', color: 'p2', label: 'HR', body: ['Hi Davis,', "I've updated my emergency contact details on my profile. Please let me know if you need anything else.", 'Thanks,', 'Ethan'], unread: true, starred: false },
   { id: 3, from: 'Lina Armand', email: 'lina.armand@company.com', subject: 'Medical Leave Submission', preview: "I've attached my doctor's note for the requested medical leave from June 20 to June 21.", time: '04:59 PM', date: '18 Jun', initials: 'LA', color: 'p3', label: 'Leave Requests', body: ['Hello,', "I've submitted my medical leave request and attached my doctor's note for the requested dates.", 'Please let me know if you need any additional information.', 'Best,', 'Lina'], unread: false, starred: false },
   { id: 4, from: 'HR Department', email: 'hr@kharismahub.com', subject: 'Performance Review Reminder', preview: 'A reminder to complete your self-assessment form as part of the performance review cycle.', time: '03:11 PM', date: '18 Jun', initials: 'HR', color: 'dark-avatar', label: 'Interview', body: ['Hello team,', 'This is a reminder to complete your self-assessment form as part of the mid-year performance review cycle.', 'Please submit your responses by 28 June.', 'Thank you,', 'HR Department'], unread: false, starred: false },
@@ -876,9 +876,9 @@ function setupTablePagination() {
     if (Number(page) === 1 && label === '1') control.classList.add('page-current');
     controls.append(control);
   };
-  addPageButton('¹', 0, true);
+  addPageButton('‹', 0, true);
   for (let page = 1; page <= pageCount; page += 1) addPageButton(String(page), page);
-  addPageButton('º', Math.min(2, pageCount), pageCount <= 1);
+  addPageButton('›', Math.min(2, pageCount), pageCount <= 1);
   pagination.append(controls);
   const resultLabel = pagination.querySelector('label');
   if (resultLabel && sizeSelect) {
@@ -898,9 +898,9 @@ function showTablePage(page) {
   pagination.dataset.currentPage = String(nextPage);
   rows.forEach((row, index) => { row.hidden = index < (nextPage - 1) * pageSize || index >= nextPage * pageSize; });
   pagination.querySelectorAll('[data-action="table-page"]').forEach((button) => {
-    button.classList.toggle('page-current', Number(button.dataset.page) === nextPage && button.textContent.trim() !== '¹' && button.textContent.trim() !== 'º');
-    if (button.textContent.trim() === '¹') { button.dataset.page = String(Math.max(1, nextPage - 1)); button.disabled = nextPage === 1; }
-    if (button.textContent.trim() === 'º') { button.dataset.page = String(Math.min(pageCount, nextPage + 1)); button.disabled = nextPage === pageCount; }
+    button.classList.toggle('page-current', Number(button.dataset.page) === nextPage && button.textContent.trim() !== '‹' && button.textContent.trim() !== '›');
+    if (button.textContent.trim() === '‹') { button.dataset.page = String(Math.max(1, nextPage - 1)); button.disabled = nextPage === 1; }
+    if (button.textContent.trim() === '›') { button.dataset.page = String(Math.min(pageCount, nextPage + 1)); button.disabled = nextPage === pageCount; }
   });
 }
 
@@ -948,7 +948,7 @@ function renderDashboardMiniCalendar() {
   const month = calendarDate.getMonth();
   const monthName = new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(calendarDate);
   const monthBtn = document.querySelector('#monthButton');
-  if (monthBtn) monthBtn.innerHTML = `${monthName} ${year} <span>âŒ„</span>`;
+  if (monthBtn) monthBtn.innerHTML = `${monthName} ${year} <span>⌄</span>`;
   grid.replaceChildren();
   weekdays.forEach((day) => {
     const item = document.createElement('span');
@@ -978,7 +978,7 @@ function renderDashboardMiniCalendar() {
       selectedDate = day;
       renderDashboardMiniCalendar();
       const schedBtn = document.querySelector('#scheduleDate');
-      if (schedBtn) schedBtn.innerHTML = `${day} ${monthName.slice(0, 3)} <span>âŒ„</span>`;
+      if (schedBtn) schedBtn.innerHTML = `${day} ${monthName.slice(0, 3)} <span>⌄</span>`;
       renderDashboardScheduleList(day);
     };
     item.addEventListener('click', selectDay);
@@ -1001,7 +1001,7 @@ function renderDashboardScheduleList(day = selectedDate) {
     return date && date.getFullYear() === calendarDate.getFullYear() && date.getMonth() === calendarDate.getMonth() && date.getDate() === Number(day);
   });
   if (!dayEvents.length) {
-    list.innerHTML = `<div style="padding:14px 10px;text-align:center;color:#64748b;font-size:10px;background:#f8fafc;border-radius:8px">Tidak ada jadwal untuk tanggal ${day} ${monthName}. <button class="date-filter" style="margin-top:6px;display:inline-block" data-action="new-event">ï¼‹ Tambah Agenda</button></div>`;
+    list.innerHTML = `<div style="padding:14px 10px;text-align:center;color:#64748b;font-size:10px;background:#f8fafc;border-radius:8px">Tidak ada jadwal untuk tanggal ${day} ${monthName}. <button class="date-filter" style="margin-top:6px;display:inline-block" data-action="new-event">+ Tambah Agenda</button></div>`;
     return;
   }
   list.innerHTML = dayEvents.map((event, i) => `
@@ -1126,7 +1126,7 @@ function getCalendarScheduleCards(day, eventId = selectedCalendarEventId) {
     return `
       <div style="padding:20px 10px;text-align:center;color:#64748b;font-size:11px">
         <p style="margin:0 0 8px">Tidak ada jadwal pada tanggal ini.</p>
-        <button class="module-button primary" data-action="new-event">ï¼‹ Tambah Agenda</button>
+        <button class="module-button primary" data-action="new-event">+ Tambah Agenda</button>
       </div>
     `;
   }
@@ -1237,7 +1237,7 @@ function pageMarkup(key) {
         name: record.employee_name || employee?.[0] || 'Karyawan', rawName: employee?.[0] || record.employee_name || 'Karyawan',
         id: record.employee_id || '', title: employee?.[3] || 'Karyawan', dept: employee?.[2] || '',
         date: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(date),
-        workModel: record.work_model || '—', checkInOut: `${record.clock_in || '—'} “ ${record.clock_out || 'Aktif'}`,
+        workModel: record.work_model || '—', checkInOut: `${record.clock_in || '—'} — ${record.clock_out || 'Aktif'}`,
         duration: record.duration || '—', overtime: record.overtime || '—', status: record.state && record.state !== 'completed' ? 'Belum Lengkap' : ({ 'On-Time': 'Tepat Waktu', Late: 'Terlambat', 'On Leave': 'Cuti', Absent: 'Tidak Hadir' }[record.status] || record.status || 'Tepat Waktu'), avatarIdx: (i % 9) + 1
       });
     });
@@ -1250,7 +1250,7 @@ function pageMarkup(key) {
       dept: userProfile.department || 'Human Resources',
       date: userAttendanceRecord.date || '19 Jun 2035',
       workModel: userAttendanceRecord.workModel || 'Di Kantor',
-      checkInOut: userAttendanceRecord.clockIn + (userAttendanceRecord.clockOut ? ' “ ' + userAttendanceRecord.clockOut : ' “ Aktif'),
+      checkInOut: userAttendanceRecord.clockIn + (userAttendanceRecord.clockOut ? ' — ' + userAttendanceRecord.clockOut : ' — Aktif'),
       duration: userAttendanceRecord.duration || 'Sedang Berjalan',
       overtime: userAttendanceRecord.overtime || '—',
       status: userAttendanceRecord.status || 'On-Time',
@@ -1295,7 +1295,7 @@ function pageMarkup(key) {
     return `
       <div class="inbox-workspace">
         <aside class="mail-folders">
-          <button class="module-button primary compose-new" data-action="new-message">ï¼‹ &nbsp;New Message</button>
+          <button class="module-button primary compose-new" data-action="new-message">+ &nbsp;Tulis Pesan</button>
           <div class="folder-list">
             ${[['Inbox','10','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>'],['Starred','3','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'],['Sent','5','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'],['Drafts','2','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'],['Spam','1','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'],['Trash','','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>']].map(([name,count,icon]) => `
               <button class="folder-button ${name === activeMailFolder ? 'selected' : ''}" data-folder="${name}">
@@ -1313,7 +1313,7 @@ function pageMarkup(key) {
         </aside>
         <section class="mail-list-pane">
           <div class="mail-search-row">
-            <label class="mail-search"><span>âŒ•</span><input id="mailSearch" placeholder="Search email" aria-label="Search email" /></label>
+            <label class="mail-search"><span>🔍</span><input id="mailSearch" placeholder="Cari email" aria-label="Cari email" /></label>
             <button class="mail-filter-button" data-action="mail-filter" aria-label="Filter email"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
           </div>
           <div class="mail-list" id="mailList"></div>
@@ -1321,15 +1321,15 @@ function pageMarkup(key) {
         <section class="mail-detail-pane">
           <div class="mail-detail-toolbar">
             <div>
-              <button data-action="mail-back" aria-label="Back">¹</button>
+              <button data-action="mail-back" aria-label="Back">‹</button>
               <button data-action="archive-message" aria-label="Archive"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="21 8 21 21 3 21 3 8"/><rect width="22" height="5" x="1" y="3" rx="1"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
               <button data-action="delete-message" aria-label="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               <button data-action="print-message" aria-label="Print"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg></button>
               <button data-action="mail-more" aria-label="More">···</button>
             </div>
             <span id="mailCounter">1 from 36</span>
-            <button data-action="mail-prev" aria-label="Previous email">¹</button>
-            <button data-action="mail-next" aria-label="Next email">º</button>
+            <button data-action="mail-prev" aria-label="Previous email">‹</button>
+            <button data-action="mail-next" aria-label="Next email">›</button>
           </div>
           <div class="mail-reader" id="mailReader"></div>
           <form class="mail-composer" id="mailComposer">
@@ -1349,17 +1349,17 @@ function pageMarkup(key) {
               <input name="bcc" placeholder="bcc@kharismahub.com" aria-label="Blind carbon copy" />
             </div>
             <div class="compose-toolbar">
-              <button type="button" data-action="undo-compose" aria-label="Undo">â†¶</button>
-              <button type="button" data-action="redo-compose" aria-label="Redo">â†·</button>
-              <span>Sans Serif âŒ„</span><span>Aa âŒ„</span>
+              <button type="button" data-action="undo-compose" aria-label="Undo">↩</button>
+              <button type="button" data-action="redo-compose" aria-label="Redo">↪</button>
+              <span>Sans Serif ⌄</span><span>Aa ⌄</span>
               <button type="button" data-action="format-bold"><b>B</b></button>
               <button type="button" data-action="format-italic"><i>I</i></button>
               <button type="button" data-action="format-underline"><u>U</u></button>
-              <span>â‰¡ âŒ„</span><span>â˜· âŒ„</span>
+              <span>≡ ⌄</span><span>⚙ ⌄</span>
             </div>
             <div class="compose-body" contenteditable="true" role="textbox" aria-label="Message body" data-placeholder="Type something..."></div>
             <div class="compose-actions">
-              <button class="send-button" type="submit">Send Message <span>âŒ„</span></button>
+              <button class="send-button" type="submit">Send Message <span>⌄</span></button>
               <button type="button" data-action="save-draft">Save draft</button>
               <button type="button" data-action="delete-draft" aria-label="Discard draft"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
             </div>
@@ -1406,13 +1406,13 @@ function pageMarkup(key) {
         <section class="calendar-board">
           <div class="calendar-board-head">
             <div class="calendar-nav-wrap">
-              <button class="cal-nav-btn" data-action="prev-cal-month" title="Bulan Sebelumnya">¹</button>
-              <button class="month-title" id="calendarBoardMonth">${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(calendarDate)} <span>âŒ„</span></button>
-              <button class="cal-nav-btn" data-action="next-cal-month" title="Bulan Berikutnya">º</button>
+              <button class="cal-nav-btn" data-action="prev-cal-month" title="Bulan Sebelumnya">‹</button>
+              <button class="month-title" id="calendarBoardMonth">${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(calendarDate)} <span>⌄</span></button>
+              <button class="cal-nav-btn" data-action="next-cal-month" title="Bulan Berikutnya">›</button>
             </div>
             <div>
-              <button class="date-filter" data-action="calendar-filter">Filter <span>âŒ„</span></button>
-              <button class="date-filter" data-action="calendar-mode">Month <span>âŒ„</span></button>
+              <button class="date-filter" data-action="calendar-filter">Filter <span>⌄</span></button>
+              <button class="date-filter" data-action="calendar-mode">Month <span>⌄</span></button>
               <button class="module-button primary" data-action="new-event">+ New Agenda</button>
             </div>
           </div>
@@ -1435,13 +1435,13 @@ function pageMarkup(key) {
     return `
       <div class="employee-overview">
         <div class="employee-stat-grid">
-          <article class="employee-stat highlight"><span>Total Employees</span><strong>${employeeData.length}</strong><small>+1.6% <em>from last month</em></small></article>
-          <article class="employee-stat"><span>New Employees (This Month)</span><strong>7</strong><small>+5.8% <em>from last month</em></small></article>
-          <article class="employee-stat"><span>Turnover Rate</span><strong>3.1%</strong><small>âˆ’2.4% <em>from last month</em></small></article>
-          <article class="employee-stat"><span>Resigned Employees</span><strong>4</strong><small>+2.1% <em>from last month</em></small></article>
+          <article class="employee-stat highlight"><span>Total Employees</span><strong>${employeeData.length}</strong><small>+1.6% <em>dari bulan lalu</em></small></article>
+          <article class="employee-stat"><span>New Employees (This Month)</span><strong>7</strong><small>+5.8% <em>dari bulan lalu</em></small></article>
+          <article class="employee-stat"><span>Turnover Rate</span><strong>3.1%</strong><small>−2.4% <em>dari bulan lalu</em></small></article>
+          <article class="employee-stat"><span>Resigned Employees</span><strong>4</strong><small>+2.1% <em>dari bulan lalu</em></small></article>
         </div>
         <section class="department-card">
-          <div class="module-card-head"><h2>Departments</h2><button class="date-filter">This Month âŒ„</button></div>
+          <div class="module-card-head"><h2>Departments</h2><button class="date-filter">This Month ⌄</button></div>
           <div class="department-content">
             <div class="department-donut"><strong>8</strong><small>Departments</small></div>
             <div class="department-legend">
@@ -1459,8 +1459,8 @@ function pageMarkup(key) {
         <div class="module-card-head">
           <h2>Employee List</h2>
           <div class="module-heading-actions">
-            <label class="module-search">âŒ• <input data-filter="employees" placeholder="Search employee" /></label>
-            <button class="date-filter" data-action="employee-filter">Filter <span>âŒ„</span></button>
+            <label class="module-search">🔍 <input data-filter="employees" placeholder="Search employee" /></label>
+            <button class="date-filter" data-action="employee-filter">Filter <span>⌄</span></button>
             <span class="toolbar-note">Sort by:</span>
             <select class="module-select"><option>Name</option><option>Join Date</option><option>Department</option></select>
             <button class="module-button primary" data-action="add-employee-page">New Employee</button>
@@ -1472,14 +1472,14 @@ function pageMarkup(key) {
             <thead>
               <tr>
                 <th><input type="checkbox" aria-label="Select all" /></th>
-                <th>Employee ID â†•</th>
-                <th>Name â†•</th>
-                <th>Job Title â†•</th>
-                <th>Department â†•</th>
-                <th>Employment Type â†•</th>
-                <th>Work Model â†•</th>
-                <th>Join Date â†•</th>
-                <th>Status â†•</th>
+                <th>ID Karyawan ↕</th>
+                <th>Nama ↕</th>
+                <th>Jabatan ↕</th>
+                <th>Departemen ↕</th>
+                <th>Jenis Kepegawaian ↕</th>
+                <th>Model Kerja ↕</th>
+                <th>Tanggal Bergabung ↕</th>
+                <th>Status ↕</th>
                 <th>Aksi</th>
               </tr>
             </thead>
@@ -1498,8 +1498,8 @@ function pageMarkup(key) {
   if (key === 'employee-grid') {
     return `
       <div class="employee-grid-toolbar">
-        <label class="module-search">âŒ• <input data-filter="employees" placeholder="Search employee" /></label>
-        <button class="date-filter" data-action="employee-filter"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span>âŒ„</span></button>
+        <label class="module-search">🔍 <input data-filter="employees" placeholder="Search employee" /></label>
+        <button class="date-filter" data-action="employee-filter"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span>⌄</span></button>
         <select><option>All Department</option><option>Marketing</option><option>Product Design</option><option>Operations</option><option>Human Resources</option></select>
         <select><option>All Position</option><option>Designer</option><option>Manager</option><option>Executive</option></select>
         <span></span><small>Sort by:</small>
@@ -1591,7 +1591,7 @@ function pageMarkup(key) {
           </div>
           <section class="module-card employee-performance-detail">
             <div class="module-card-head"><h2>Performance Overview</h2><select><option>Last Year</option><option>This Year</option></select></div>
-            <div class="detail-performance-score"><strong>${safe(profile.score)}</strong><span>â†— ${safe(profile.scoreChange)} Increased by last year</span></div>
+            <div class="detail-performance-score"><strong>${safe(profile.score)}</strong><span>↗ ${safe(profile.scoreChange)} Increased by last year</span></div>
             <div class="employee-performance-chart">
               <div class="detail-y-axis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
               <div class="detail-chart-plot">
@@ -1636,7 +1636,7 @@ function pageMarkup(key) {
         </div>
         <aside class="employee-detail-side">
           <section class="module-card employee-calendar-card">
-            <div class="employee-mini-calendar-head"><strong>June 2035 âŒ„</strong><div><button aria-label="Previous month">¹</button><button aria-label="Next month">º</button></div></div>
+            <div class="employee-mini-calendar-head"><strong>June 2035 ⌄</strong><div><button aria-label="Bulan sebelumnya">‹</button><button aria-label="Bulan berikutnya">›</button></div></div>
             <div class="employee-mini-weekdays">${['S','M','T','W','T','F','S'].map((day) => `<span>${day}</span>`).join('')}</div>
             <div class="detail-calendar">
               ${Array.from({ length: 35 }, (_, i) => {
@@ -1832,9 +1832,9 @@ function pageMarkup(key) {
         </section>
       </div>
       <section class="module-card attendance-self-service">
-        <div class="module-card-head"><div><h2>Presensi Saya</h2><p class="dialog-desc">${assignedShift ? `Shift ${safe(assignedShift.name)} · ${String(assignedShift.start_time).slice(0,5)}“${String(assignedShift.end_time).slice(0,5)}` : 'Shift belum ditetapkan'} · ${attendanceDisplayState()}</p></div>
+        <div class="module-card-head"><div><h2>Presensi Saya</h2><p class="dialog-desc">${assignedShift ? `Shift ${safe(assignedShift.name)} · ${String(assignedShift.start_time).slice(0,5)}—${String(assignedShift.end_time).slice(0,5)}` : 'Shift belum ditetapkan'} · ${attendanceDisplayState()}</p></div>
           ${transitionAction ? `<button class="module-button primary" data-action="attendance-transition" data-transition="${transitionAction}">${transitionLabel}</button>` : `<span class="status ontime">Hari ini selesai</span>`}${activeRecordToday && userAttendanceRecord.state === 'working' ? `<button class="module-button secondary" data-action="attendance-transition" data-transition="clock_out">Presensi Pulang</button>` : ''}</div>
-        <div class="attendance-timeline"><span>Masuk <b>${safe(userAttendanceRecord?.clockIn || '—')}</b></span>${(userAttendanceRecord?.breakSessions || []).map((item,index)=>`<span>Istirahat ${index+1} <b>${attendanceTimeLabel(item.start)}“${item.end ? attendanceTimeLabel(item.end) : 'berlangsung'}</b></span>`).join('')}<span>Pulang <b>${safe(userAttendanceRecord?.clockOut || '—')}</b></span><span>Durasi bersih <b>${safe(userAttendanceRecord?.duration || '—')}</b></span><span>Lokasi <b>${userAttendanceRecord?.location?.verified ? `Terverifikasi · ${Math.round(userAttendanceRecord.location.distance)} m dari kantor` : 'Akan diperiksa saat absen'}</b></span>${userAttendanceRecord?.overtimeApprovalStatus === 'pending' ? '<span>Lembur <b>Menunggu persetujuan atasan</b></span>' : ''}${attendanceSyncQueue.length ? `<span>Antrean sinkronisasi <b>${attendanceSyncQueue.length} aksi menunggu validasi</b></span>` : ''}</div>
+        <div class="attendance-timeline"><span>Masuk <b>${safe(userAttendanceRecord?.clockIn || '—')}</b></span>${(userAttendanceRecord?.breakSessions || []).map((item,index)=>`<span>Istirahat ${index+1} <b>${attendanceTimeLabel(item.start)}—${item.end ? attendanceTimeLabel(item.end) : 'berlangsung'}</b></span>`).join('')}<span>Pulang <b>${safe(userAttendanceRecord?.clockOut || '—')}</b></span><span>Durasi bersih <b>${safe(userAttendanceRecord?.duration || '—')}</b></span><span>Lokasi <b>${userAttendanceRecord?.location?.verified ? `Terverifikasi · ${Math.round(userAttendanceRecord.location.distance)} m dari kantor` : 'Akan diperiksa saat absen'}</b></span>${userAttendanceRecord?.overtimeApprovalStatus === 'pending' ? '<span>Lembur <b>Menunggu persetujuan atasan</b></span>' : ''}${attendanceSyncQueue.length ? `<span>Antrean sinkronisasi <b>${attendanceSyncQueue.length} aksi menunggu validasi</b></span>` : ''}</div>
         ${userAttendanceRecord?.id ? `<details class="attendance-correction"><summary>Ajukan koreksi catatan</summary><form data-attendance-correction><label>Jam masuk yang benar<input type="time" name="clockIn" value="${safe(String(userAttendanceRecord.clockIn || '').slice(0,5))}" /></label><label>Jam pulang yang benar<input type="time" name="clockOut" value="${safe(String(userAttendanceRecord.clockOut || '').slice(0,5))}" /></label><label>Alasan koreksi<textarea name="reason" minlength="5" maxlength="1000" required></textarea></label><button class="module-button secondary" type="submit">Kirim untuk Persetujuan</button></form></details>` : ''}
         ${ownIncompleteRecords.map(record=>`<details class="attendance-correction"><summary>Lengkapi presensi ${safe(record.date)} · belum pulang</summary><form data-attendance-correction data-attendance-id="${safe(record.id)}"><label>Jam masuk yang benar<input type="time" name="clockIn" value="${safe(String(record.clock_in || '').slice(0,5))}" /></label><label>Jam pulang yang benar<input type="time" name="clockOut" required /></label><label>Alasan koreksi<textarea name="reason" minlength="5" maxlength="1000" required></textarea></label><button class="module-button secondary" type="submit">Ajukan Koreksi</button></form></details>`).join('')}
         ${localIncompleteRecords.map(record=>`<p class="dialog-desc attendance-incomplete-note">Presensi demo ${safe(record.date || record.dateKey)} belum lengkap. Lengkapi catatan atau ajukan koreksi setelah akun terhubung ke Supabase.</p>`).join('')}
@@ -1844,9 +1844,9 @@ function pageMarkup(key) {
       ${(isAdmin() || userProfile.role === 'Supervisor') ? `<section class="module-card attendance-review-panel"><div class="module-card-head"><h2>Persetujuan Absensi</h2><span class="toolbar-note">${attendanceReviewQueue.corrections.length} koreksi · ${attendanceReviewQueue.overtime.length} lembur</span></div>${attendanceReviewQueue.corrections.map(request=>`<article class="attendance-review-item"><span><strong>${safe(request.attendance_records?.employee_name || 'Karyawan')}</strong><small>Koreksi: ${safe(JSON.stringify(request.requested_values || {}))} · ${safe(request.reason)}</small></span><button class="module-button secondary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="rejected">Tolak</button><button class="module-button primary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="approved">Setujui</button></article>`).join('')}${attendanceReviewQueue.overtime.map(record=>`<article class="attendance-review-item"><span><strong>${safe(record.employee_name)} · ${safe(record.date)}</strong><small>Lembur ${safe(record.overtime)}</small></span><button class="module-button secondary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="false">Tolak</button><button class="module-button primary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="true">Setujui</button></article>`).join('')}${!attendanceReviewQueue.corrections.length && !attendanceReviewQueue.overtime.length ? '<p class="dialog-desc">Tidak ada koreksi atau lembur yang menunggu persetujuan.</p>' : ''}</section>` : ''}
       ${section('Daftar Kehadiran', `
         <div class="module-toolbar">
-          <label class="module-search">âŒ• <input data-filter="attendance" placeholder="Cari karyawan" /></label>
+          <label class="module-search">🔍 <input data-filter="attendance" placeholder="Cari karyawan" /></label>
           <div class="filter-dropdown-wrap">
-            <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'Semua Status'} <span>âŒ„</span></button>
+            <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'Semua Status'} <span>⌄</span></button>
             <div class="filter-dropdown-menu" id="attendanceFilterDropdown" style="display:none">
               <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Semua Status">Semua Status</button>
               <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Tepat Waktu">Tepat Waktu</button>
@@ -1865,14 +1865,14 @@ function pageMarkup(key) {
           <table class="module-table attendance-full-table">
             <thead>
               <tr>
-                <th class="sortable" data-col="0">Nama â†•</th>
-                <th class="sortable" data-col="1">Jabatan â†•</th>
-                <th class="sortable" data-col="2">Tanggal â†•</th>
-                <th class="sortable" data-col="3">Model Kerja â†•</th>
-                <th class="sortable" data-col="4">Masuk - Pulang â†•</th>
-                <th class="sortable" data-col="5">Durasi Bersih â†•</th>
-                <th class="sortable" data-col="6">Lembur â†•</th>
-                <th class="sortable" data-col="7">Status â†•</th>
+                <th class="sortable" data-col="0">Nama ↕</th>
+                <th class="sortable" data-col="1">Jabatan ↕</th>
+                <th class="sortable" data-col="2">Tanggal ↕</th>
+                <th class="sortable" data-col="3">Model Kerja ↕</th>
+                <th class="sortable" data-col="4">Masuk - Pulang ↕</th>
+                <th class="sortable" data-col="5">Durasi Bersih ↕</th>
+                <th class="sortable" data-col="6">Lembur ↕</th>
+                <th class="sortable" data-col="7">Status ↕</th>
               </tr>
             </thead>
             <tbody>${attendanceRows}</tbody>
@@ -1880,7 +1880,7 @@ function pageMarkup(key) {
         </div>
         <div class="pagination-row">
           <label>Show <select><option>10</option></select> of ${allAttendanceItems.length} results</label>
-          <div><button>¹</button><button class="page-current">1</button><button>2</button><button>º</button></div>
+          <div><button>‹</button><button class="page-current">1</button><button>2</button><button>›</button></div>
         </div>
       `)}
     `;
@@ -1892,13 +1892,13 @@ function pageMarkup(key) {
       <div class="performance-top-grid">
         ${section('Team Performance', `<div class="team-bars">${['Jan','Feb','Mar','Apr','May','Jun'].map((m, i) => `<span><b>${78 + i * 2}%</b><i style="height:${65 + i * 4}%"></i><small>${m}</small></span>`).join('')}</div>`)}
         ${section('Performance by Category', `<div class="category-bars">${[['Team Work','90%'],['Work Quality','86%'],['Problem-Solving','82%'],['Time Management','76%']].map(([name, val]) => `<div><span>${name}<b>4.5/5 — ${val}</b></span><i></i></div>`).join('')}</div>`)}
-        ${section('Average Performance', '<div class="performance-gauge"><strong>87.5%</strong><small>Total Score</small><b>â†— +3.8%</b></div>')}
+        ${section('Average Performance', '<div class="performance-gauge"><strong>87.5%</strong><small>Total Score</small><b>↗ +3.8%</b></div>')}
       </div>
       <div class="performance-lower-grid">
         ${section('Employee Performance', `
           <div class="module-toolbar">
             <select><option>This Month</option><option>Last Month</option></select>
-            <button class="module-button primary" data-action="create-review" style="margin-left:auto">ï¼‹ New Review Cycle</button>
+            <button class="module-button primary" data-action="create-review" style="margin-left:auto">+ New Review Cycle</button>
           </div>
           <div class="module-table-wrap">
             <table class="module-table">
@@ -1950,11 +1950,11 @@ function pageMarkup(key) {
       </div>
       ${section('Payroll List', `
         <div class="module-toolbar">
-          <label class="module-search">âŒ• <input data-filter="payroll" placeholder="Search employee, ID, etc" /></label>
-          <button class="date-filter" data-action="payroll-filter">Filter <span>âŒ„</span></button>
+          <label class="module-search">🔍 <input data-filter="payroll" placeholder="Search employee, ID, etc" /></label>
+          <button class="date-filter" data-action="payroll-filter">Filter <span>⌄</span></button>
           <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
-            <button class="module-button primary" data-action="new-payrun">ï¼‹ New Pay Run</button>
-            <button class="module-button secondary" data-action="export-payroll">â‡© Export report</button>
+            <button class="module-button primary" data-action="new-payrun">+ New Pay Run</button>
+            <button class="module-button secondary" data-action="export-payroll">📥 Ekspor Laporan</button>
           </div>
         </div>
         <div class="module-table-wrap">
@@ -2011,10 +2011,10 @@ function pageMarkup(key) {
       </div>
       ${section('Leave Activity & Approval', `
         <div class="module-toolbar">
-          <label class="module-search">âŒ• <input data-filter="leave" placeholder="Search employee, reason, etc" /></label>
-          <button class="date-filter" data-action="leave-filter">Filter <span>âŒ„</span></button>
+          <label class="module-search">🔍 <input data-filter="leave" placeholder="Search employee, reason, etc" /></label>
+          <button class="date-filter" data-action="leave-filter">Filter <span>⌄</span></button>
           <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
-            <button class="module-button primary" data-action="request-leave">ï¼‹ Request Leave</button>
+            <button class="module-button primary" data-action="request-leave">+ Request Leave</button>
           </div>
         </div>
         <div class="module-table-wrap">
@@ -2098,7 +2098,7 @@ function pageMarkup(key) {
             <section class="module-card recruitment-chart-card">
               <div class="module-card-head">
                 <h2>Application</h2>
-                <button class="date-filter">Last 6 Months âŒ„</button>
+                <button class="date-filter">Last 6 Months ⌄</button>
               </div>
               <div class="application-trend-wrap">
                 <div class="trend-y-axis">
@@ -2131,7 +2131,7 @@ function pageMarkup(key) {
             <section class="module-card vacancies-card">
               <div class="module-card-head">
                 <h2>Current Vacancies</h2>
-                <button class="date-filter">Filter âŒ„</button>
+                <button class="date-filter">Filter ⌄</button>
               </div>
               <div class="vacancy-grid">
                 <article class="vacancy-box">
@@ -2196,8 +2196,8 @@ function pageMarkup(key) {
               </div>
             </div>
             <div class="module-toolbar">
-              <label class="module-search">âŒ• <input data-filter="recruitment" placeholder="Search applicant" /></label>
-              <button class="module-button primary" data-action="add-candidate">ï¼‹ Add Applicant</button>
+              <label class="module-search">🔍 <input data-filter="recruitment" placeholder="Search applicant" /></label>
+              <button class="module-button primary" data-action="add-candidate">+ Add Applicant</button>
             </div>
             <div class="module-table-wrap">
               <table class="module-table applicants-table">
@@ -2302,9 +2302,9 @@ function pageMarkup(key) {
             </div>
             <div class="mini-schedule-box">
               <div class="mini-schedule-head">
-                <button class="cal-nav-btn">¹</button>
+                <button class="cal-nav-btn">‹</button>
                 <strong>June 2035</strong>
-                <button class="cal-nav-btn">º</button>
+                <button class="cal-nav-btn">›</button>
               </div>
               <div class="mini-weekdays-row">
                 <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
@@ -2457,7 +2457,7 @@ function pageMarkup(key) {
                 <p style="margin:2px 0 0;font-size:12px;color:#64748b">Kelola akun Admin, Atasan, dan Karyawan. Karyawan ditautkan melalui email kantor.</p>
               </div>
               <div class="module-heading-actions">
-                <button class="module-button primary" data-action="new-user-account">ï¼‹ Tambah Akun Baru</button>
+                <button class="module-button primary" data-action="new-user-account">+ Tambah Akun Baru</button>
               </div>
             </div>
 
@@ -2547,7 +2547,7 @@ function pageMarkup(key) {
                 <p style="margin:2px 0 0;font-size:12px;color:#64748b">Kelola struktur departemen, penanggung jawab/kepala divisi, alokasi anggaran, dan target pencapaian.</p>
               </div>
               <div class="module-heading-actions">
-                <button class="module-button primary" data-action="new-division">ï¼‹ Tambah Divisi Baru</button>
+                <button class="module-button primary" data-action="new-division">+ Tambah Divisi Baru</button>
               </div>
             </div>
 
@@ -2661,14 +2661,14 @@ function pageMarkup(key) {
             <div class="module-card-head">
               <h2>Daftar Target &amp; Indikator Kinerja (KPI)</h2>
               <div class="module-heading-actions">
-                <label class="module-search">âŒ• <input data-filter="kpi" id="kpiSearchInput" placeholder="Cari indikator KPI, PIC, atau divisi..." /></label>
+                <label class="module-search">🔍 <input data-filter="kpi" id="kpiSearchInput" placeholder="Cari indikator KPI, PIC, atau divisi..." /></label>
                 ${!supervisorDept ? `<div class="filter-dropdown-wrap">
-                  <button class="date-filter" data-action="kpi-dept-filter" id="kpiDeptFilterBtn">${moduleView.dataset.kpiDeptFilter || 'Semua Divisi'} <span>âŒ„</span></button>
+                  <button class="date-filter" data-action="kpi-dept-filter" id="kpiDeptFilterBtn">${moduleView.dataset.kpiDeptFilter || 'Semua Divisi'} <span>⌄</span></button>
                 </div>` : ''}
                 <div class="filter-dropdown-wrap">
-                  <button class="date-filter" data-action="kpi-status-filter" id="kpiStatusFilterBtn">${moduleView.dataset.kpiStatusFilter || 'Semua Status'} <span>âŒ„</span></button>
+                  <button class="date-filter" data-action="kpi-status-filter" id="kpiStatusFilterBtn">${moduleView.dataset.kpiStatusFilter || 'Semua Status'} <span>⌄</span></button>
                 </div>
-                ${isAdminUser ? `<button class="module-button primary" data-action="new-kpi">ï¼‹ Tambah KPI Baru</button>` : ''}
+                ${isAdminUser ? `<button class="module-button primary" data-action="new-kpi">+ Tambah KPI Baru</button>` : ''}
                 <button class="module-button secondary" data-action="export-kpi">Export Laporan</button>
               </div>
             </div>
@@ -2677,14 +2677,14 @@ function pageMarkup(key) {
               <table class="module-table kpi-table">
                 <thead>
                   <tr>
-                    <th class="sortable" data-col="0">Indikator KPI â†•</th>
-                    <th class="sortable" data-col="1">Departemen &amp; PIC â†•</th>
-                    <th class="sortable" data-col="2">Periode â†•</th>
-                    <th class="sortable" data-col="3">Bobot â†•</th>
-                    <th class="sortable" data-col="4">Target â†•</th>
-                    <th class="sortable" data-col="5">Realisasi â†•</th>
-                    <th class="sortable" data-col="6">Capaian (%) â†•</th>
-                    <th class="sortable" data-col="7">Status â†•</th>
+                    <th class="sortable" data-col="0">Indikator KPI ↕</th>
+                    <th class="sortable" data-col="1">Departemen &amp; PIC ↕</th>
+                    <th class="sortable" data-col="2">Periode ↕</th>
+                    <th class="sortable" data-col="3">Bobot ↕</th>
+                    <th class="sortable" data-col="4">Target ↕</th>
+                    <th class="sortable" data-col="5">Realisasi ↕</th>
+                    <th class="sortable" data-col="6">Capaian (%) ↕</th>
+                    <th class="sortable" data-col="7">Status ↕</th>
                     <th style="min-width:115px">Aksi</th>
                   </tr>
                 </thead>
@@ -2988,7 +2988,7 @@ function openModule(key, updateUrl = true, params = null) {
       greeting.innerHTML = '<strong>Inbox</strong><small>Dashboard / Inbox</small>';
       renderInboxPage();
     } else if (key === 'employee-details') {
-      greeting.innerHTML = '<button class="employee-detail-back" data-action="back-employees" aria-label="Back to employees">â†</button><span><strong>Employee Details</strong><small>Dashboard / Employees / ' + safe(selectedEmployeeName) + '</small></span>';
+      greeting.innerHTML = '<button class="employee-detail-back" data-action="back-employees" aria-label="Kembali ke daftar karyawan">←</button><span><strong>Employee Details</strong><small>Dashboard / Employees / ' + safe(selectedEmployeeName) + '</small></span>';
     } else {
       greeting.innerHTML = `<strong>${safe(moduleTitles[key][0])}</strong><small>Dashboard / ${safe(moduleTitles[key][0])}</small>`;
     }
@@ -3215,7 +3215,7 @@ function renderMailList() {
           <small>${safe(mail.preview)}</small>
         </span>
       </button>
-      <button class="mail-star ${mail.starred ? 'starred' : ''}" data-action="toggle-star" data-id="${mail.id}">â˜†</button>
+      <button class="mail-star ${mail.starred ? 'starred' : ''}" data-action="toggle-star" data-id="${mail.id}">☆</button>
     </article>
   `).join('') : '<div class="mail-empty">Tidak ada pesan di folder ini.</div>';
 }
@@ -3236,8 +3236,8 @@ function renderMailReader() {
         <small>${safe(mail.email)}</small>
       </div>
       <time>${safe(mail.date)} - ${safe(mail.time)}</time>
-      <button data-action="reply-message">â†¶ &nbsp;Reply</button>
-      <button data-action="forward-message">â†— &nbsp;Forward</button>
+      <button data-action="reply-message">↩ &nbsp;Reply</button>
+      <button data-action="forward-message">↗ &nbsp;Forward</button>
     </div>
     <h2 class="mail-subject">${safe(mail.subject)}</h2>
     <div class="mail-body">${mail.body.map((line) => `<p>${safe(line)}</p>`).join('')}</div>
@@ -4248,7 +4248,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.calFilter || 'Semua Kategori';
     const next = categories[(categories.indexOf(cur) + 1) % categories.length];
     moduleView.dataset.calFilter = next;
-    btn.innerHTML = `${next === 'Semua Kategori' ? 'Filter' : next} <span>âŒ„</span>`;
+    btn.innerHTML = `${next === 'Semua Kategori' ? 'Filter' : next} <span>⌄</span>`;
     moduleView.querySelectorAll('.calendar-event').forEach(ev => {
       const title = ev.dataset.title;
       const item = calendarItems.find(c => c.title === title);
@@ -4264,7 +4264,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.calMode || 'Month';
     const next = modes[(modes.indexOf(cur) + 1) % modes.length];
     moduleView.dataset.calMode = next;
-    btn.innerHTML = `${next} <span>âŒ„</span>`;
+    btn.innerHTML = `${next} <span>⌄</span>`;
     showToast(`Mode kalender diubah ke: ${next}`);
     return;
   }
@@ -4436,7 +4436,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.deptFilter || 'Semua Divisi';
     const next = depts[(depts.indexOf(cur) + 1) % depts.length];
     moduleView.dataset.deptFilter = next;
-    btn.textContent = next === 'Semua Divisi' ? 'Filter <span>âŒ„</span>' : `${next} <span>âŒ„</span>`;
+    btn.textContent = next === 'Semua Divisi' ? 'Filter <span>⌄</span>' : `${next} <span>⌄</span>`;
     moduleView.querySelectorAll('.employees-table tbody tr, .employee-cards .employee-card').forEach(row => {
       row.hidden = next !== 'Semua Divisi' && !row.textContent.includes(next);
     });
@@ -4457,7 +4457,7 @@ moduleView.addEventListener('click', async (event) => {
     const status = btn.dataset.status;
     moduleView.dataset.attFilter = status;
     const filterBtn = moduleView.querySelector('#attendanceFilterBtn');
-    if (filterBtn) filterBtn.innerHTML = `${status === 'Semua Status' ? 'Filter' : status} <span>âŒ„</span>`;
+    if (filterBtn) filterBtn.innerHTML = `${status === 'Semua Status' ? 'Filter' : status} <span>⌄</span>`;
     const menu = moduleView.querySelector('#attendanceFilterDropdown');
     if (menu) menu.style.display = 'none';
     moduleView.querySelectorAll('.attendance-full-table tbody tr').forEach(row => {
@@ -4474,7 +4474,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.payFilter || 'Semua';
     const next = statuses[(statuses.indexOf(cur) + 1) % statuses.length];
     moduleView.dataset.payFilter = next;
-    btn.textContent = next === 'Semua' ? 'Filter <span>âŒ„</span>' : `${next} <span>âŒ„</span>`;
+    btn.textContent = next === 'Semua' ? 'Filter <span>⌄</span>' : `${next} <span>⌄</span>`;
     moduleView.querySelectorAll('.payroll-table tbody tr').forEach(row => {
       row.hidden = next !== 'Semua' && !row.textContent.includes(next);
     });
@@ -4488,7 +4488,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.lvFilter || 'Semua';
     const next = statuses[(statuses.indexOf(cur) + 1) % statuses.length];
     moduleView.dataset.lvFilter = next;
-    btn.textContent = next === 'Semua' ? 'Filter <span>âŒ„</span>' : `${next} <span>âŒ„</span>`;
+    btn.textContent = next === 'Semua' ? 'Filter <span>⌄</span>' : `${next} <span>⌄</span>`;
     moduleView.querySelectorAll('.leave-table tbody tr').forEach(row => {
       row.hidden = next !== 'Semua' && !row.textContent.includes(next);
     });
@@ -4642,7 +4642,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.kpiDeptFilter || 'Semua Divisi';
     const next = depts[(depts.indexOf(cur) + 1) % depts.length];
     moduleView.dataset.kpiDeptFilter = next;
-    btn.innerHTML = `${next} <span>âŒ„</span>`;
+    btn.innerHTML = `${next} <span>⌄</span>`;
     const statusFilter = moduleView.dataset.kpiStatusFilter || 'Semua Status';
     moduleView.querySelectorAll('.kpi-table tbody tr').forEach(row => {
       const deptMatch = next === 'Semua Divisi' || row.dataset.kpiDept === next;
@@ -4658,7 +4658,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.kpiStatusFilter || 'Semua Status';
     const next = statuses[(statuses.indexOf(cur) + 1) % statuses.length];
     moduleView.dataset.kpiStatusFilter = next;
-    btn.innerHTML = `${next} <span>âŒ„</span>`;
+    btn.innerHTML = `${next} <span>⌄</span>`;
     const deptFilter = moduleView.dataset.kpiDeptFilter || 'Semua Divisi';
     moduleView.querySelectorAll('.kpi-table tbody tr').forEach(row => {
       const deptMatch = deptFilter === 'Semua Divisi' || row.dataset.kpiDept === deptFilter;
@@ -5182,7 +5182,7 @@ moduleView.addEventListener('click', async (event) => {
         employeeData.sort((a, b) => isAsc ? a[sortKey].localeCompare(b[sortKey]) : b[sortKey].localeCompare(a[sortKey]));
       }
       openModule('employees');
-      showToast(`Tabel diurutkan berdasarkan ${btn.textContent.replace(/[â†•\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
+      showToast(`Tabel diurutkan berdasarkan ${btn.textContent.replace(/[↕\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
       return;
     }
   }
@@ -5208,7 +5208,7 @@ moduleView.addEventListener('click', async (event) => {
       return isAsc ? textA.localeCompare(textB, undefined, { numeric: true }) : textB.localeCompare(textA, undefined, { numeric: true });
     });
     rows.forEach(r => tbody.appendChild(r));
-    showToast(`Tabel absensi diurutkan: ${btn.textContent.replace(/[â†•\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
+    showToast(`Tabel absensi diurutkan: ${btn.textContent.replace(/[↕\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
     return;
   }
 
@@ -5240,7 +5240,7 @@ moduleView.addEventListener('click', async (event) => {
     });
 
     openModule('kpi');
-    showToast(`Tabel KPI diurutkan: ${btn.textContent.replace(/[â†•\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
+    showToast(`Tabel KPI diurutkan: ${btn.textContent.replace(/[↕\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
     return;
   }
 });
@@ -5612,7 +5612,7 @@ function setupDashboardControls() {
     const cur = btn.dataset.state || 'This Month';
     const next = states[(states.indexOf(cur) + 1) % states.length];
     btn.dataset.state = next;
-    btn.innerHTML = `${next} <span>âŒ„</span>`;
+    btn.innerHTML = `${next} <span>⌄</span>`;
     showToast(`Filter absensi dasbor: ${next}`);
   });
 
@@ -5622,7 +5622,7 @@ function setupDashboardControls() {
       const cur = btn.dataset.period || 'This Month';
       const next = periods[(periods.indexOf(cur) + 1) % periods.length];
       btn.dataset.period = next;
-      btn.innerHTML = `${next} <span>âŒ„</span>`;
+      btn.innerHTML = `${next} <span>⌄</span>`;
       showToast(`Periode data diubah ke: ${next}`);
     });
   });

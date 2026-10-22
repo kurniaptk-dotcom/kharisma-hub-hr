@@ -1230,13 +1230,23 @@ function renderDashboardSummary() {
   const dashEmpTbody = document.querySelector('#employeeRows');
   if (dashEmpTbody) {
     const todayStr = new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date());
-    const rowsSource = scopedEmployees.slice(0, 8);
+    const activeRecToday = userAttendanceRecord && (userAttendanceRecord.dateKey === attendanceTodayKey() || isActiveOvernightAttendance(userAttendanceRecord)) ? userAttendanceRecord : null;
+    const orderedScoped = [...scopedEmployees];
+    if (activeRecToday) {
+      const myIdx = orderedScoped.findIndex(p => p && String(p[0]).toLowerCase() === String(activeRecToday.name || userProfile.name).toLowerCase());
+      if (myIdx > 0) {
+        const [myRow] = orderedScoped.splice(myIdx, 1);
+        orderedScoped.unshift(myRow);
+      }
+    }
+    const rowsSource = orderedScoped.filter(Boolean).slice(0, 8);
     dashEmpTbody.innerHTML = rowsSource.map((p, idx) => {
       const prof = getEmployeeProfile(p[0]);
-      const st = p[4] || 'On-Time';
+      const isMeToday = activeRecToday && String(p[0]).toLowerCase() === String(activeRecToday.name || userProfile.name).toLowerCase();
+      const st = isMeToday ? (activeRecToday.status || p[4] || 'On-Time') : (p[4] || 'On-Time');
       const stClass = st === 'Late' ? 'late' : st === 'On Leave' ? 'leave' : st === 'Absent' ? 'absent' : 'ontime';
-      const checkIn = st === 'On Leave' || st === 'Absent' ? '—' : (idx % 2 === 0 ? '08:55 AM' : '09:04 AM');
-      const checkOut = st === 'On Leave' || st === 'Absent' ? '—' : (idx % 2 === 0 ? '05:05 PM' : '05:15 PM');
+      const checkIn = isMeToday ? (activeRecToday.clockIn || '—') : (st === 'On Leave' || st === 'Absent' ? '—' : (idx % 2 === 0 ? '08:55 AM' : '09:04 AM'));
+      const checkOut = isMeToday ? (activeRecToday.clockOut || 'Sedang Bekerja') : (st === 'On Leave' || st === 'Absent' ? '—' : (idx % 2 === 0 ? '05:05 PM' : '05:15 PM'));
       return `
         <tr data-dept="${safe(p[2])}" data-status="${safe(st)}">
           <td>
@@ -1247,8 +1257,8 @@ function renderDashboardSummary() {
           </td>
           <td><strong>${safe(p[3])}</strong><small>${safe(p[2])}</small></td>
           <td>${todayStr}</td>
-          <td>${checkIn}</td>
-          <td>${checkOut}</td>
+          <td>${safe(checkIn)}</td>
+          <td>${safe(checkOut)}</td>
           <td><span class="status ${stClass}">${safe(st)}</span></td>
         </tr>
       `;
@@ -1436,6 +1446,7 @@ function renderDashboardSummary() {
       dashQaClockBtn.dataset.action = 'clock-in';
     }
   }
+  if (typeof syncQuickAbsenButtons === 'function') syncQuickAbsenButtons();
 }
 
 /* ==========================================================================
@@ -2256,59 +2267,6 @@ function pageMarkup(key) {
     ];
 
     return `
-      <div class="attendance-overview-layout">
-        <div class="attendance-status-cards">
-          <article class="attendance-status present">
-            <span class="status-card-label">Present</span>
-            <strong class="status-card-val">${livePresent} <small>Employees</small></strong>
-            <div class="status-card-trend"><b>+3.2%</b> <span>from yesterday</span></div>
-            <footer class="status-card-footer"><span><b>${liveOnTime}</b> On-Time</span><span><b>${liveLate}</b> Late</span></footer>
-          </article>
-          <article class="attendance-status leave">
-            <span class="status-card-label">On Leave</span>
-            <strong class="status-card-val">${liveOnLeave} <small>Employees</small></strong>
-            <div class="status-card-trend"><b>${leaveRequests.filter(r => r.status === 'Approved').length}</b> <span>approved requests</span></div>
-            <footer class="status-card-footer"><span><b>${Math.max(1, liveOnLeave - 1)}</b> Annual Leave</span><span><b>1</b> Sick Leave</span></footer>
-          </article>
-          <article class="attendance-status absent">
-            <span class="status-card-label">Absent</span>
-            <strong class="status-card-val">${liveAbsent} <small>Employees</small></strong>
-            <div class="status-card-trend down"><b>−0.8%</b> <span>from yesterday</span></div>
-            <footer class="status-card-footer"><span><b>${Math.max(0, liveAbsent - 1)}</b> Unplanned</span><span><b>${liveAbsent > 0 ? 1 : 0}</b> No Notice</span></footer>
-          </article>
-        </div>
-        <section class="module-card attendance-chart-card">
-          <div class="module-card-head">
-            <h2>Attendance Overview</h2>
-            <select class="module-select" data-select="att-chart-period"><option value="Last 6 Months">Last 6 Months</option><option value="This Year">This Year</option></select>
-          </div>
-          <div class="attendance-chart-content">
-            <div class="attendance-chart-legend">
-              <span><i class="legend-circle pres-dot"></i>Present</span>
-              <span><i class="legend-circle leave-dot"></i>On Leave</span>
-              <span><i class="legend-circle abs-dot"></i>Absent</span>
-            </div>
-            <div class="attendance-chart-wrap">
-              <div class="attendance-y-axis">
-                <span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span>
-              </div>
-              <div class="attendance-bars-container">
-                ${chartBars.map(([m, pres, lv, abs]) => `
-                  <div class="attendance-bar-col">
-                    <div class="bar-track">
-                      <span class="bar-fill abs-fill" style="height:${abs}%" title="${m}: ${abs}% Absent"></span>
-                      <span class="bar-fill leave-fill" style="height:${lv}%" title="${m}: ${lv}% On Leave"></span>
-                      <span class="bar-fill pres-fill" style="height:${pres}%" title="${m}: ${pres}% Present"></span>
-                    </div>
-                    <span class="bar-col-label">${m}</span>
-                  </div>
-                `).join('')}
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-
       <section class="module-card attendance-self-service">
         <div class="attendance-live-bar">
           <div class="attendance-live-info">
@@ -2411,6 +2369,59 @@ function pageMarkup(key) {
           </div>` : ''}
         </div>` : ''}
       </section>
+
+      <div class="attendance-overview-layout">
+        <div class="attendance-status-cards">
+          <article class="attendance-status present">
+            <span class="status-card-label">Present</span>
+            <strong class="status-card-val">${livePresent} <small>Employees</small></strong>
+            <div class="status-card-trend"><b>+3.2%</b> <span>from yesterday</span></div>
+            <footer class="status-card-footer"><span><b>${liveOnTime}</b> On-Time</span><span><b>${liveLate}</b> Late</span></footer>
+          </article>
+          <article class="attendance-status leave">
+            <span class="status-card-label">On Leave</span>
+            <strong class="status-card-val">${liveOnLeave} <small>Employees</small></strong>
+            <div class="status-card-trend"><b>${leaveRequests.filter(r => r.status === 'Approved').length}</b> <span>approved requests</span></div>
+            <footer class="status-card-footer"><span><b>${Math.max(1, liveOnLeave - 1)}</b> Annual Leave</span><span><b>1</b> Sick Leave</span></footer>
+          </article>
+          <article class="attendance-status absent">
+            <span class="status-card-label">Absent</span>
+            <strong class="status-card-val">${liveAbsent} <small>Employees</small></strong>
+            <div class="status-card-trend down"><b>−0.8%</b> <span>from yesterday</span></div>
+            <footer class="status-card-footer"><span><b>${Math.max(0, liveAbsent - 1)}</b> Unplanned</span><span><b>${liveAbsent > 0 ? 1 : 0}</b> No Notice</span></footer>
+          </article>
+        </div>
+        <section class="module-card attendance-chart-card">
+          <div class="module-card-head">
+            <h2>Attendance Overview</h2>
+            <select class="module-select" data-select="att-chart-period"><option value="Last 6 Months">Last 6 Months</option><option value="This Year">This Year</option></select>
+          </div>
+          <div class="attendance-chart-content">
+            <div class="attendance-chart-legend">
+              <span><i class="legend-circle pres-dot"></i>Present</span>
+              <span><i class="legend-circle leave-dot"></i>On Leave</span>
+              <span><i class="legend-circle abs-dot"></i>Absent</span>
+            </div>
+            <div class="attendance-chart-wrap">
+              <div class="attendance-y-axis">
+                <span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span>
+              </div>
+              <div class="attendance-bars-container">
+                ${chartBars.map(([m, pres, lv, abs]) => `
+                  <div class="attendance-bar-col">
+                    <div class="bar-track">
+                      <span class="bar-fill abs-fill" style="height:${abs}%" title="${m}: ${abs}% Absent"></span>
+                      <span class="bar-fill leave-fill" style="height:${lv}%" title="${m}: ${lv}% On Leave"></span>
+                      <span class="bar-fill pres-fill" style="height:${pres}%" title="${m}: ${pres}% Present"></span>
+                    </div>
+                    <span class="bar-col-label">${m}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
 
       ${section('Employee Attendance', `
         <div class="module-toolbar">
@@ -7394,8 +7405,84 @@ function setupMobileNavigationDrawer() {
   });
 }
 
+function syncQuickAbsenButtons() {
+  // 1. Ensure sidebar navigation label is unmistakably clear across all pages
+  document.querySelectorAll('.nav-link[data-module="attendance"]').forEach(link => {
+    const iconSpan = link.querySelector('.nav-icon');
+    const iconHtml = iconSpan ? iconSpan.outerHTML : '<span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>';
+    if (!link.textContent.includes('Absensi')) {
+      link.innerHTML = `${iconHtml}Absensi &amp; Kehadiran`;
+    }
+  });
+
+  // 2. Inject Quick Absen button into .topbar .top-actions across all 10 pages if not present
+  const topActions = document.querySelector('.topbar .top-actions');
+  let topbarBtn = document.querySelector('#topbarAbsenBtn');
+  if (topActions && !topbarBtn) {
+    topbarBtn = document.createElement('button');
+    topbarBtn.type = 'button';
+    topbarBtn.id = 'topbarAbsenBtn';
+    topbarBtn.className = 'topbar-absen-btn';
+    topbarBtn.dataset.action = 'clock-in';
+    const cloudBadge = topActions.querySelector('#cloudStatusBadge');
+    if (cloudBadge) {
+      topActions.insertBefore(topbarBtn, cloudBadge);
+    } else {
+      topActions.prepend(topbarBtn);
+    }
+  }
+
+  // 3. Compute current attendance state for today
+  const todayKey = attendanceTodayKey();
+  const activeToday = userAttendanceRecord && (userAttendanceRecord.dateKey === todayKey || isActiveOvernightAttendance(userAttendanceRecord))
+    ? userAttendanceRecord
+    : null;
+
+  let label = 'Absen Masuk';
+  let stateClass = 'state-checkin';
+  let actionType = 'clock-in';
+  let titleText = 'Klik untuk mencatat jam masuk kerja (Clock In) hari ini';
+
+  if (activeToday) {
+    if (activeToday.state === 'working') {
+      label = `Absen Pulang (${activeToday.clockIn || 'Aktif'})`;
+      stateClass = 'state-checkout';
+      actionType = 'clock-in';
+      titleText = `Sudah masuk pukul ${activeToday.clockIn || '-'} • Klik untuk mencatat jam pulang (Clock Out)`;
+    } else if (activeToday.state === 'on_break') {
+      label = 'Selesai Istirahat';
+      stateClass = 'state-break';
+      actionType = 'clock-in';
+      titleText = 'Klik untuk mengakhiri waktu istirahat dan kembali bekerja';
+    } else if (activeToday.state === 'completed' || activeToday.clockOut) {
+      label = `Sudah Absen (${activeToday.clockIn || '-'} - ${activeToday.clockOut || '-'})`;
+      stateClass = 'state-done';
+      actionType = 'nav-attendance';
+      titleText = 'Presensi hari ini telah selesai • Klik untuk membuka detail di menu Absensi & Kehadiran';
+    }
+  }
+
+  const clockSvg = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+
+  if (topbarBtn) {
+    topbarBtn.className = `topbar-absen-btn ${stateClass}`;
+    topbarBtn.dataset.action = actionType;
+    topbarBtn.title = titleText;
+    topbarBtn.innerHTML = `${clockSvg}<span>${safe(label)}</span>`;
+  }
+
+  const dashBtn = document.querySelector('#dashAbsenBtn');
+  if (dashBtn) {
+    dashBtn.className = `dash-absen-btn ${stateClass}`;
+    dashBtn.dataset.action = actionType;
+    dashBtn.title = titleText;
+    dashBtn.innerHTML = `${clockSvg}<span id="dashAbsenBtnText">${safe(label)}</span>`;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   setupMobileNavigationDrawer();
+  syncQuickAbsenButtons();
   renderDashboardMiniCalendar();
   renderDashboardScheduleList();
   renderDashboardSummary();
@@ -7407,6 +7494,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Run immediately in case script loads after DOM ready
 setupMobileNavigationDrawer();
+syncQuickAbsenButtons();
 renderDashboardMiniCalendar();
 renderDashboardScheduleList();
 updateNotificationBadge();

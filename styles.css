@@ -2147,7 +2147,6 @@ body.theme-dark .summary-card.interactive-card:hover {
 }
 @media(max-width:520px){.kpi-tabs-bar{gap:4px;padding:3px}.kpi-tab-btn{padding:7px 10px;font-size:12px}.module-table-wrap,.table-scroll{min-width:0;max-width:100%;overflow-x:auto}#moduleView[data-page='employees'] .employee-list-card .module-card-head,#moduleView[data-page='employees'] .employee-list-card .module-heading-actions{min-width:0;max-width:100%}.attendance-chart-card{padding-right:10px;padding-left:10px}}
 .app-shell[hidden]{display:none!important}
-.app-shell[data-auth-pending]{visibility:hidden!important}
 .auth-gate[hidden],.auth-card[hidden]{display:none!important}
 .auth-gate{position:fixed;inset:0;z-index:10000;display:grid;place-items:stretch;overflow:auto;background:#f5f8ff;color:#102744}
 .auth-layout{min-height:100dvh;display:grid;grid-template-columns:minmax(320px,.92fr) minmax(360px,1.08fr)}

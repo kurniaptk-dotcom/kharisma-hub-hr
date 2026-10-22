@@ -1,5 +1,4 @@
 // Kharisma Hub HR Management - Core Application Script
-document.querySelector('.app-shell')?.setAttribute('data-auth-pending', '');
 let toastTimer;
 
 function showToast(message) {
@@ -96,6 +95,7 @@ function installSupabaseAuthGate() {
     return;
   }
 
+  root.removeAttribute('data-auth-pending');
   root.hidden = false;
   root.inert = false;
   document.body.classList.add('auth-ready');
@@ -103,6 +103,7 @@ function installSupabaseAuthGate() {
 
   const hydrateScopedData = async () => {
     try {
+      cloudDataHydrating = true;
       const [employees, kpis, leaves, attendance, calendar] = await Promise.all([
         window.KharismaDB.employees.getAll([]),
         window.KharismaDB.kpi.getAll([]),
@@ -123,6 +124,8 @@ function installSupabaseAuthGate() {
       persistEmployeeData(); persistKpiData(); persistLeaveRequests(); writeStoredValue('teamhub.calendarItems', calendarItems);
     } catch (e) {
       console.warn('[KharismaDB] Hydration:', e.message);
+    } finally {
+      cloudDataHydrating = false;
     }
   };
 

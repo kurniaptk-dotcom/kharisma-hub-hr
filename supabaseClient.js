@@ -51,6 +51,9 @@
     return client;
   }
 
+  // Initialize client immediately so auth methods are ready synchronously
+  initClient();
+
   async function testConnection() {
     if (!client) {
       isConnected = false;

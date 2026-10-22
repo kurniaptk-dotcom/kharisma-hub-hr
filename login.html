@@ -135,6 +135,11 @@
           loginError.textContent = '';
         });
 
+        document.querySelector('.auth-hint')?.addEventListener('click', () => {
+          document.getElementById('loginEmail').value = 'kurniaptk@gmail.com';
+          document.getElementById('loginPassword').value = 'kharisma132';
+        });
+
         loginForm?.addEventListener('submit', async (e) => {
           e.preventDefault();
           loginError.textContent = '';

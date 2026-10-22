@@ -27,6 +27,12 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(204).end();
   const auth = await requireUser(req);
   if (auth.error) return reject(res, auth);
+
+  // Endpoint mandiri untuk pengguna memuat profilnya sendiri secara aman (bypass RLS recursion)
+  if (req.method === 'GET' && (req.query?.me === 'true' || req.query?.me === '1')) {
+    return res.status(200).json({ data: auth.profile });
+  }
+
   if (!adminOnly(auth)) return res.status(403).json({ error: 'Hanya administrator yang dapat mengelola akun pengguna.' });
 
   if (req.method === 'GET') {

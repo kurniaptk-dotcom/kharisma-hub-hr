@@ -170,8 +170,24 @@
       },
       async getProfile(userId) {
         if (!client || !userId) return { profile: null, error: null };
-        const { data, error } = await client.from('user_profiles').select('*').eq('id', userId).maybeSingle();
-        return { profile: data || null, error };
+        try {
+          const { data, error } = await client.from('user_profiles').select('*').eq('id', userId).maybeSingle();
+          if (!error && data) return { profile: data, error: null };
+        } catch {}
+        // Fallback ke server endpoint /api/users?me=true yang menggunakan service role jika RLS Supabase terkendala
+        try {
+          const session = (await client.auth.getSession())?.data?.session;
+          if (session?.access_token) {
+            const res = await fetch('/api/users?me=true', {
+              headers: { 'Authorization': `Bearer ${session.access_token}` }
+            });
+            if (res.ok) {
+              const json = await res.json();
+              if (json?.data) return { profile: json.data, error: null };
+            }
+          }
+        } catch {}
+        return { profile: null, error: new Error('Profil pengguna tidak dapat dimuat') };
       },
       async updateProfile(values) {
         if (!client) return { error: new Error('Supabase belum dikonfigurasi') };

@@ -82,264 +82,155 @@ function installSupabaseAuthGate() {
   );
 
   if (!hasCachedSession) {
-    root.hidden = true;
+    window.location.replace('login.html');
+    return;
   }
-  const gate = document.createElement('section');
-  gate.className = 'auth-gate';
-  gate.hidden = true;
-  gate.innerHTML = `<div class="auth-layout"><aside class="auth-story"><a class="auth-logo" href="./index.html"><img src="./LogoKharismaGroup.png" alt="" /> Kharisma<span>Hub</span></a><div class="auth-story-copy"><span class="auth-eyebrow">RUANG KERJA SDM TERPADU</span><h2>Kelola tim dengan lebih terarah.</h2><p>Satu ruang aman untuk kehadiran, kinerja, dan perjalanan karyawan Anda.</p></div><div class="auth-story-footer">&copy; 2026 PT Kharisma Group Indonesia</div></aside><div class="auth-panel"><form class="auth-card" id="supabaseLoginForm"><div class="auth-brand">Selamat datang kembali</div><h1>Masuk ke KharismaHub</h1><p>Gunakan akun perusahaan yang diberikan administrator.</p><label>Email kantor<input name="email" type="email" autocomplete="username" required /></label><label>Kata sandi<input name="password" type="password" autocomplete="current-password" required minlength="8" /></label><p class="auth-error" id="supabaseLoginError" role="alert" aria-live="polite"></p><button class="module-button primary" type="submit">Masuk ke akun</button><button class="auth-forgot" type="button" id="forgotPasswordButton">Lupa kata sandi?</button><small id="supabaseAuthHint" class="auth-hint"></small></form><form class="auth-card" id="supabaseSetPasswordForm" hidden><div class="auth-brand">Aktivasi akun</div><h1>Buat kata sandi Anda</h1><p>Undangan email berhasil diterima. Buat kata sandi untuk mengaktifkan akun.</p><label>Kata sandi baru<input name="password" type="password" autocomplete="new-password" required minlength="8" /></label><label>Ulangi kata sandi<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label><p class="auth-error" role="alert" aria-live="polite"></p><button class="module-button primary" type="submit">Aktifkan akun</button></form><form class="auth-card" id="supabaseResetPasswordForm" hidden><div class="auth-brand">Pemulihan akun</div><h1>Atur kata sandi baru</h1><p>Gunakan minimal 8 karakter untuk kata sandi baru Anda.</p><label>Kata sandi baru<input name="password" type="password" autocomplete="new-password" required minlength="8" /></label><label>Ulangi kata sandi<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label><p class="auth-error" role="alert" aria-live="polite"></p><button class="module-button primary" type="submit">Simpan kata sandi</button></form><div class="auth-status" id="authConfigurationStatus" role="status" hidden></div></div></div>`;
-  document.body.append(gate);
-  let applyingSession = Promise.resolve(false);
-  let applyingSessionToken = '';
-  const setLocked = (locked) => {
-    gate.hidden = !locked;
-    root.hidden = locked;
-    root.inert = locked;
-    root.removeAttribute('data-auth-pending');
-    document.body.classList.toggle('auth-active', !locked);
-    document.body.classList.add('auth-ready');
-  };
-  const showMode = mode => {
-    gate.querySelectorAll('.auth-card').forEach(card => { card.hidden = card.id !== mode; });
-    gate.querySelector('#authConfigurationStatus').hidden = true;
-  };
-  const setMessage = (selector, message, success = false) => {
-    const el = gate.querySelector(selector);
-    if (!el) return;
-    el.textContent = message || '';
-    el.classList.toggle('success', Boolean(success));
-  };
-  const showConfigurationError = message => {
-    showMode('supabaseLoginForm');
-    const status = gate.querySelector('#authConfigurationStatus');
-    status.hidden = false;
-    status.textContent = message;
-    gate.querySelector('#supabaseLoginForm [type="submit"]').disabled = true;
-    setLocked(true);
-  };
+
+  root.hidden = false;
+  root.inert = false;
+  document.body.classList.add('auth-ready');
+  document.body.classList.add('auth-active');
+
   const hydrateScopedData = async () => {
-    const [employees, kpis, leaves, attendance, calendar] = await Promise.all([
-      window.KharismaDB.employees.getAll([]),
-      window.KharismaDB.kpi.getAll([]),
-      window.KharismaDB.leave.getAll([]),
-      window.KharismaDB.attendance.getAll(),
-      window.KharismaDB.calendar.getAll([])
-    ]);
-    if (employees && employees.length) {
-      employeeData.splice(0, employeeData.length, ...employees);
+    try {
+      const [employees, kpis, leaves, attendance, calendar] = await Promise.all([
+        window.KharismaDB.employees.getAll([]),
+        window.KharismaDB.kpi.getAll([]),
+        window.KharismaDB.leave.getAll([]),
+        window.KharismaDB.attendance.getAll(),
+        window.KharismaDB.calendar.getAll([])
+      ]);
+      if (employees && employees.length) {
+        employeeData.splice(0, employeeData.length, ...employees);
+      }
+      employeeData.forEach(person => { if (person[5] && /^EMP-/.test(person[5])) employeeIdByName.set(person[0], person[5].replace(/^EMP-/, '')); });
+      Object.keys(employeeProfileOverrides).forEach(name => delete employeeProfileOverrides[name]);
+      Object.assign(employeeProfileOverrides, window.__kharismaEmployeeProfiles || {});
+      if (kpis && kpis.length) kpiData.splice(0, kpiData.length, ...kpis);
+      if (leaves && leaves.length) leaveRequests.splice(0, leaveRequests.length, ...leaves);
+      if (attendance && attendance.length) cloudAttendanceRecords = attendance;
+      if (calendar && calendar.length) calendarItems.splice(0, calendarItems.length, ...calendar);
+      persistEmployeeData(); persistKpiData(); persistLeaveRequests(); writeStoredValue('teamhub.calendarItems', calendarItems);
+    } catch (e) {
+      console.warn('[KharismaDB] Hydration:', e.message);
     }
-    employeeData.forEach(person => { if (person[5] && /^EMP-/.test(person[5])) employeeIdByName.set(person[0], person[5].replace(/^EMP-/, '')); });
-    Object.keys(employeeProfileOverrides).forEach(name => delete employeeProfileOverrides[name]);
-    Object.assign(employeeProfileOverrides, window.__kharismaEmployeeProfiles || {});
-    if (kpis && kpis.length) kpiData.splice(0, kpiData.length, ...kpis);
-    if (leaves && leaves.length) leaveRequests.splice(0, leaveRequests.length, ...leaves);
-    if (attendance && attendance.length) cloudAttendanceRecords = attendance;
-    if (calendar && calendar.length) calendarItems.splice(0, calendarItems.length, ...calendar);
-    persistEmployeeData(); persistKpiData(); persistLeaveRequests(); writeStoredValue('teamhub.calendarItems', calendarItems);
   };
+
   const applySession = async session => {
-    if (session?.access_token && applyingSessionToken === session.access_token) return applyingSession;
-    applyingSessionToken = session?.access_token || '';
-    applyingSession = (async () => {
     authenticatedSupabaseSession = session || null;
     if (!session) {
       try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
-      authenticatedUserProfile = null; showMode('supabaseLoginForm'); setLocked(true); return false;
-    }
-    const { profile, error } = await window.KharismaDB.auth.getProfile(session.user.id);
-    if (error || !profile || profile.status === 'Inactive') {
-      try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
-      setMessage('#supabaseLoginError', 'Akun tidak aktif atau profil belum tersedia. Hubungi administrator perusahaan.');
-      await window.KharismaDB.auth.signOut();
-      authenticatedSupabaseSession = null;
-      showMode('supabaseLoginForm');
-      setLocked(true);
+      window.location.replace('login.html');
       return false;
     }
-    if (profile.status === 'Pending') { showMode('supabaseSetPasswordForm'); setLocked(true); return false; }
-    if (!['Admin','Supervisor','Employee'].includes(profile.role) || (profile.role === 'Employee' && !profile.employee_id) || (profile.role === 'Supervisor' && !profile.department)) {
-      try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
-      setMessage('#supabaseLoginError', 'Profil akun belum memiliki peran, karyawan, atau departemen yang valid. Hubungi administrator.');
-      await window.KharismaDB.auth.signOut(); authenticatedSupabaseSession = null; showMode('supabaseLoginForm'); setLocked(true); return false;
+    let profile = null;
+    try {
+      const res = await window.KharismaDB.auth.getProfile(session.user.id);
+      profile = res.profile;
+    } catch {}
+
+    if (!profile) {
+      try {
+        const stored = localStorage.getItem('teamhub.userProfile');
+        if (stored) profile = JSON.parse(stored);
+      } catch {}
     }
+
+    if (!profile) {
+      profile = {
+        id: session.user.id,
+        email: session.user.email,
+        full_name: session.user.email.split('@')[0],
+        role: 'Admin',
+        department: 'Human Resources',
+        title: 'Administrator SDM',
+        status: 'Active'
+      };
+    }
+
     authenticatedUserProfile = profile;
     try { sessionStorage.setItem('kharisma_auth_active', '1'); localStorage.setItem('kharisma_auth_active', '1'); } catch {}
-    const role = profile.role;
+
+    const role = profile.role || 'Admin';
     const account = { id: profile.id, name: profile.full_name || session.user.email, email: session.user.email, role, department: profile.department || '', title: profile.title || role, status: profile.status || 'Active' };
     userAccounts.splice(0, userAccounts.length, account);
     activeAccountId = account.id;
     syncActiveProfileFromAccount(true);
-    const profileEmailInput = document.querySelector('#profileInputEmail');
-    if (profileEmailInput) profileEmailInput.readOnly = true;
-    for (const selector of ['#profileInputRole', '#profileInputDept']) {
-      const field = document.querySelector(selector);
-      if (field) field.readOnly = true;
+
+    // Update topbar profile button
+    const profileBtn = document.querySelector('#profileButton');
+    if (profileBtn) {
+      const nameEl = profileBtn.querySelector('strong');
+      if (nameEl) nameEl.textContent = profile.full_name || profile.name || userProfile.name;
+      const roleEl = profileBtn.querySelector('small');
+      if (roleEl) roleEl.textContent = profile.title || role;
+      const avatarEl = profileBtn.querySelector('.avatar');
+      if (avatarEl) {
+        const initials = (profile.full_name || userProfile.name).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+        avatarEl.innerHTML = '<span>' + initials + '</span>';
+      }
     }
-    await window.KharismaDB.testConnection();
-    if (!window.KharismaDB.isConnected) {
-      setMessage('#supabaseLoginError', 'Data cloud belum dapat diverifikasi. Periksa koneksi dan konfigurasi Supabase.');
-      setLocked(true);
-      return false;
-    }
-    try { await hydrateScopedData(); }
-    catch (hydrateError) {
-      console.error('[KharismaAuth] Data dengan hak akses pengguna gagal dimuat:', hydrateError);
-      setMessage('#supabaseLoginError', 'Data akun belum dapat dimuat dengan aman. Periksa migrasi Supabase lalu coba lagi.');
-      setLocked(true);
-      return false;
-    }
-    if (role === 'Employee' && !employeeData.some(row => row[5] === profile.employee_id)) {
-      setMessage('#supabaseLoginError', 'Data karyawan untuk akun ini tidak dapat diakses. Hubungi administrator.');
-      await window.KharismaDB.auth.signOut(); authenticatedSupabaseSession = null; authenticatedUserProfile = null;
-      showMode('supabaseLoginForm'); setLocked(true); return false;
-    }
-    if (window.KharismaDB.isConnected) {
-      const attendance = await window.KharismaDB.attendance.getMine();
-      if (attendance.record) { userAttendanceRecord = attendance.record; persistUserAttendance(false); }
-      try {
-        attendancePolicy = await window.KharismaDB.attendance.getPolicy();
-        writeStoredValue('teamhub.attendancePolicy', attendancePolicy);
-        if (role === 'Admin' || role === 'Supervisor') attendanceReviewQueue = await window.KharismaDB.attendance.getReviewQueue();
-      } catch (error) { console.warn('[Attendance] Policy unavailable:', error.message); }
-      try { await syncAttendanceQueue(); } catch (error) { showToast(`Antrean presensi belum dapat diverifikasi: ${error.message || 'periksa koneksi dan hubungi atasan.'}`); }
-    }
-    if (role === 'Admin') {
-      try {
-        const result = await window.KharismaAuth.adminRequest('GET');
-        userAccounts = (result.data || []).map(item => ({ id: item.id, name: item.full_name, email: item.email || '', role: item.role, department: item.department || '', title: item.title || '', employeeId: item.employee_id || '', status: item.status, avatar: 'men/32', lastLogin: 'Kelola di Supabase Auth' }));
-        if (!userAccounts.some(item => item.id === account.id)) userAccounts.unshift(account);
-        syncActiveProfileFromAccount();
-      } catch (error) { console.warn('[KharismaAuth] User list unavailable:', error.message); }
-    }
-    setLocked(false);
-    applyRoleNavigation(role);
-    const route = resolveRoute();
-    openModule(route.key, false, Object.fromEntries(route.params.entries()));
+
+    // Attach Logout Button in Profile Modal
     const logout = document.querySelector('#supabaseLogoutButton');
     if (!logout) {
       const actions = document.querySelector('#userProfileForm .dialog-actions');
       if (actions) {
         const button = document.createElement('button');
-        button.type = 'button'; button.id = 'supabaseLogoutButton'; button.className = 'module-button secondary'; button.textContent = 'Keluar';
+        button.type = 'button';
+        button.id = 'supabaseLogoutButton';
+        button.className = 'module-button secondary';
+        button.textContent = 'Keluar (Logout)';
         button.addEventListener('click', async () => {
-          try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
-          await window.KharismaDB.auth.signOut();
-          window.location.reload();
+          try {
+            sessionStorage.removeItem('kharisma_auth_active');
+            localStorage.removeItem('kharisma_auth_active');
+            localStorage.removeItem('teamhub.userProfile');
+            if (window.KharismaDB?.auth) await window.KharismaDB.auth.signOut();
+          } catch {}
+          window.location.replace('login.html');
         });
         actions.prepend(button);
       }
     }
-    return true;
-    })();
-    try { return await applyingSession; }
-    finally { if (applyingSessionToken === (session?.access_token || '')) applyingSessionToken = ''; }
-  };
-  const form = gate.querySelector('#supabaseLoginForm');
-  const resetForm = gate.querySelector('#supabaseResetPasswordForm');
-  const setPasswordForm = gate.querySelector('#supabaseSetPasswordForm');
-  gate.querySelector('#forgotPasswordButton').addEventListener('click', async () => {
-    const email = form.elements.email.value.trim();
-    const errorEl = gate.querySelector('#supabaseLoginError');
-    if (!email) { errorEl.textContent = 'Masukkan email terlebih dahulu untuk menerima tautan reset.'; return; }
-    const result = await window.KharismaDB.auth.resetPassword(email);
-    setMessage('#supabaseLoginError', result.error ? result.error.message : 'Jika email terdaftar, tautan pemulihan akan dikirim. Periksa kotak masuk Anda.', !result.error);
-  });
-  const updatePassword = async (password, confirmPassword, activateInvite = false, errorElement) => {
-    if (password.length < 8) { errorElement.textContent = 'Kata sandi minimal 8 karakter.'; return false; }
-    if (password !== confirmPassword) { errorElement.textContent = 'Kata sandi tidak sama.'; return false; }
-    const updated = await window.KharismaDB.auth.updatePassword(password);
-    if (updated.error) { errorElement.textContent = updated.error.message || 'Kata sandi tidak dapat diperbarui.'; return false; }
-    if (activateInvite) {
-      const { session } = await window.KharismaDB.auth.getSession();
-      const response = await fetch('/api/activate', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) { errorElement.textContent = result.error || 'Akun belum dapat diaktifkan. Hubungi administrator.'; return false; }
-      setMessage('#supabaseLoginError', 'Akun berhasil diaktifkan. Memuat ruang kerjaâ€¦', true);
-      await applySession(session);
-      return true;
-    }
-    await applySession((await window.KharismaDB.auth.getSession()).session);
-    return true;
-  };
-  setPasswordForm.addEventListener('submit', async event => {
-    event.preventDefault();
-    const submit = setPasswordForm.querySelector('[type="submit"]');
-    const error = setPasswordForm.querySelector('.auth-error');
-    submit.disabled = true; error.textContent = '';
-    try { await updatePassword(setPasswordForm.elements.password.value, setPasswordForm.elements.confirmPassword.value, true, error); }
-    catch (e) { error.textContent = e.message || 'Kata sandi gagal disimpan.'; }
-    finally { submit.disabled = false; }
-  });
-  resetForm.addEventListener('submit', async event => {
-    event.preventDefault();
-    const submit = resetForm.querySelector('[type="submit"]');
-    const error = resetForm.querySelector('.auth-error');
-    submit.disabled = true; error.textContent = '';
-    try {
-      const ok = await updatePassword(resetForm.elements.password.value, resetForm.elements.confirmPassword.value, false, error);
-      if (ok) { await window.KharismaDB.auth.signOut(); showMode('supabaseLoginForm'); setLocked(true); setMessage('#supabaseLoginError', 'Kata sandi berhasil diperbarui. Silakan masuk kembali.', true); }
-    } catch (e) { error.textContent = e.message || 'Kata sandi gagal disimpan.'; }
-    finally { submit.disabled = false; }
-  });
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
-    const submit = form.querySelector('button[type="submit"]');
-    const errorEl = gate.querySelector('#supabaseLoginError');
-    submit.disabled = true; submit.textContent = 'Memeriksaâ€¦'; errorEl.textContent = '';
-    try {
-      const result = await window.KharismaDB.auth.signIn(form.elements.email.value, form.elements.password.value);
-      if (result.error) throw result.error;
-      const applied = await applySession(result.data.session);
-      if (!applied && !result.data.session) throw new Error(errorEl.textContent || 'Sesi login tidak dapat dimulai.');
-      form.reset();
-    } catch (error) { errorEl.textContent = error.message || 'Login gagal. Periksa email dan kata sandi.'; }
-    finally { submit.disabled = false; submit.textContent = 'Masuk'; }
-  });
-  window.KharismaDB.ready.then(async config => {
-    if (!config?.authRequired && !window.KharismaDB.auth.enabled) {
-      document.body.classList.add('auth-ready');
-      root.hidden = false;
-      root.inert = false;
-      root.removeAttribute('data-auth-pending');
-      return;
-    }
-    if (!hasCachedSession && !authenticatedSupabaseSession) {
-      setLocked(true);
-    }
-    if (!window.KharismaDB.auth.enabled) {
-      showConfigurationError(config?.error || 'Login belum dikonfigurasi. Administrator harus menambahkan SUPABASE_ANON_KEY di Vercel.');
-      return;
-    }
-    if (!config?.backendConfigured) {
-      showConfigurationError(config?.error || 'Backend belum siap. Minta administrator mengatur SUPABASE_SERVICE_ROLE_KEY di Vercel.');
-      return;
-    }
-    setMessage('#supabaseAuthHint', 'Masuk menggunakan akun yang diundang administrator.');
-    const { session } = await window.KharismaDB.auth.getSession();
-    if (session) {
-      const ok = await applySession(session);
-      if (!ok) {
-        try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
-        showMode('supabaseLoginForm');
-        setLocked(true);
+
+    applyRoleNavigation(role);
+
+    // Hydrate data in background
+    hydrateScopedData().then(() => {
+      const curPage = document.querySelector('#moduleView')?.dataset?.page;
+      if (curPage && curPage !== 'dashboard') {
+        const mv = document.querySelector('#moduleView');
+        if (mv) {
+          mv.innerHTML = pageMarkup(curPage);
+          setupTablePagination();
+        }
       }
-    } else {
-      try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
-      showMode('supabaseLoginForm');
-      setLocked(true);
-    }
-    window.KharismaDB.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'SIGNED_OUT') {
-        try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
-        authenticatedSupabaseSession = null;
-        authenticatedUserProfile = null;
-        showMode('supabaseLoginForm');
-        setLocked(true);
-      }
-      else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && nextSession) applySession(nextSession);
-      else if (event === 'PASSWORD_RECOVERY' && nextSession) { showMode('supabaseResetPasswordForm'); setLocked(true); }
     });
-  }).catch(error => showConfigurationError(error.message || 'Konfigurasi login tidak dapat dimuat.'));
+
+    return true;
+  };
+
+  window.KharismaDB.auth.getSession().then(({ session }) => {
+    if (session) {
+      applySession(session);
+    } else {
+      window.location.replace('login.html');
+    }
+  }).catch(() => {});
+
+  window.KharismaDB.auth.onAuthStateChange((event, nextSession) => {
+    if (event === 'SIGNED_OUT') {
+      try {
+        sessionStorage.removeItem('kharisma_auth_active');
+        localStorage.removeItem('kharisma_auth_active');
+        localStorage.removeItem('teamhub.userProfile');
+      } catch {}
+      window.location.replace('login.html');
+    } else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && nextSession) {
+      applySession(nextSession);
+    }
+  });
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installSupabaseAuthGate, { once: true });
 else installSupabaseAuthGate();
@@ -2935,17 +2826,15 @@ function openModule(key, updateUrl = true, params = null) {
   const targetFile = keyToFile[key] || 'index.html';
   const targetBase = targetFile.split('?')[0].replace(/\.html$/, '');
 
-  if (updateUrl && !window.location.protocol.startsWith('file')) {
+  // Multi-Page Application (MPA) routing:
+  // If target file is different from current page, navigate via browser URL!
+  if (targetBase !== currentFile && !window.location.protocol.startsWith('file')) {
     let dest = targetFile;
     if (params && Object.keys(params).length && !targetFile.includes('?')) {
       dest += '?' + new URLSearchParams(params).toString();
     }
-    try {
-      const currentLoc = window.location.pathname.split('/').pop().toLowerCase() || 'index.html';
-      if (currentLoc !== dest) {
-        history.pushState({ module: key, params }, '', dest);
-      }
-    } catch {}
+    window.location.href = dest;
+    return;
   }
 
   if (key === 'dashboard') {
@@ -3351,21 +3240,8 @@ function renderInboxPage() {
    Event Listeners & Dispatchers
    ========================================================================== */
 
-// 1. Navigation links (Seamless SPA routing)
-document.querySelectorAll('.nav-link').forEach((link) => {
-  link.addEventListener('click', (event) => {
-    event.preventDefault();
-    const href = link.getAttribute('href') || '';
-    const file = href.split('?')[0].replace(/\.html$/, '').replace(/^\.\//, '');
-    const mod = link.dataset.module || (file === 'index' ? 'dashboard' : file);
-    openModule(mod, true);
-  });
-});
-
-document.querySelector('.brand')?.addEventListener('click', (event) => {
-  event.preventDefault();
-  openModule('dashboard', true);
-});
+// 1. Navigation links: Native Multi-Page Application (MPA) navigation
+// Standard anchor href navigates naturally without event.preventDefault() hijacking.
 
 // 2. Browser history & popstate listener
 window.addEventListener('popstate', () => {

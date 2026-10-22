@@ -1769,7 +1769,7 @@ function pageMarkup(key) {
         </aside>
         <section class="mail-list-pane">
           <div class="mail-search-row">
-            <label class="mail-search"><span>🔍</span><input id="mailSearch" placeholder="Cari email" aria-label="Cari email" /></label>
+            <label class="mail-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input id="mailSearch" placeholder="Cari email" aria-label="Cari email" /></label>
             <button class="mail-filter-button" data-action="mail-filter" aria-label="Filter email"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
           </div>
           <div class="mail-list" id="mailList"></div>
@@ -1915,7 +1915,7 @@ function pageMarkup(key) {
         <div class="module-card-head">
           <h2>Employee List</h2>
           <div class="module-heading-actions">
-            <label class="module-search">🔍 <input data-filter="employees" placeholder="Search employee" /></label>
+            <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="employees" placeholder="Search employee" /></label>
             <button class="date-filter" data-action="employee-filter">Filter <span>⌄</span></button>
             <span class="toolbar-note">Sort by:</span>
             <select class="module-select" data-select="employee-sort"><option value="Name">Name</option><option value="Join Date">Join Date</option><option value="Department">Department</option></select>
@@ -1954,7 +1954,7 @@ function pageMarkup(key) {
   if (key === 'employee-grid') {
     return `
       <div class="employee-grid-toolbar">
-        <label class="module-search">🔍 <input data-filter="employees" placeholder="Search employee" /></label>
+        <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="employees" placeholder="Search employee" /></label>
         <button class="date-filter" data-action="employee-filter"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span>⌄</span></button>
         <select data-select="grid-dept"><option value="All Department">All Department</option>${departmentsData.map(d => `<option value="${safe(d.name)}">${safe(d.name)}</option>`).join('')}</select>
         <select data-select="grid-position"><option value="All Position">All Position</option><option value="Designer">Designer</option><option value="Manager">Manager</option><option value="Executive">Executive</option><option value="Engineer">Engineer</option><option value="Analyst">Analyst</option><option value="Officer">Officer</option><option value="Supervisor">Supervisor</option></select>
@@ -2327,10 +2327,10 @@ function pageMarkup(key) {
             </div>
           </div>
           <div class="attendance-live-actions">
-            ${transitionAction ? `<button class="module-button primary" data-action="attendance-transition" data-transition="${transitionAction}">⏱ ${transitionLabel}</button>` : `<span class="status ontime">✔ Presensi Hari Ini Selesai</span>`}
+            ${transitionAction ? `<button class="module-button primary" data-action="attendance-transition" data-transition="${transitionAction}">${transitionLabel}</button>` : `<span class="status ontime">Presensi Hari Ini Selesai</span>`}
             ${activeRecordToday && userAttendanceRecord.state === 'working' ? `<button class="module-button secondary" data-action="attendance-transition" data-transition="clock_out">Presensi Pulang</button>` : ''}
             <button type="button" class="module-button secondary" data-action="toggle-att-correction" title="Ajukan Koreksi Jam Kerja">Ajukan Koreksi</button>
-            ${(isAdmin() || isSupervisor()) ? `<button type="button" class="module-button secondary" data-action="toggle-att-admin" title="Pengaturan Lokasi Kantor & Shift">⚙ Kebijakan &amp; Shift</button>` : ''}
+            ${(isAdmin() || isSupervisor()) ? `<button type="button" class="module-button secondary" data-action="toggle-att-admin" title="Pengaturan Lokasi Kantor & Shift">Kebijakan &amp; Shift</button>` : ''}
           </div>
         </div>
 
@@ -2361,7 +2361,7 @@ function pageMarkup(key) {
               </div>
               <label>Radius Kantor (meter)<input type="number" name="radius" min="20" max="5000" value="${safe(attendancePolicy.location?.radius_m || attendancePolicy.location?.radiusM || 500)}" required /></label>
               <div style="display:flex;gap:8px;margin-top:8px">
-                <button type="button" class="module-button secondary" data-action="use-my-gps-location">📍 Gunakan GPS Saya</button>
+                <button type="button" class="module-button secondary" data-action="use-my-gps-location">Gunakan GPS Saya</button>
                 <button class="module-button primary" type="submit">Simpan Lokasi</button>
               </div>
             </form>
@@ -2414,7 +2414,7 @@ function pageMarkup(key) {
 
       ${section('Employee Attendance', `
         <div class="module-toolbar">
-          <label class="module-search">🔍 <input data-filter="attendance" placeholder="Search employee, department, status..." /></label>
+          <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="attendance" placeholder="Search employee, department, status..." /></label>
           <div class="filter-dropdown-wrap">
             <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'All Status'} <span>⌄</span></button>
             <div class="filter-dropdown-menu" id="attendanceFilterDropdown" style="display:none">
@@ -2498,10 +2498,10 @@ function pageMarkup(key) {
 
     return `
       <div class="payroll-stats">
-        <article><span>Total Salary</span><strong>${formatIDR(totalSalarySum)}</strong><small>+5.4% from last month</small><i>$</i></article>
-        <article><span>Total Allowances</span><strong>${formatIDR(totalAllowanceSum)}</strong><small>+3.6% from last month</small><i>✦</i></article>
-        <article><span>Total Overtime</span><strong>${formatIDR(totalOvertimeSum)}</strong><small>+2.3% from last month</small><i>⏱</i></article>
-        <article><span>Total Incentives</span><strong>${formatIDR(totalIncentiveSum)}</strong><small>+4.9% from last month</small><i>★</i></article>
+        <article><span>Total Salary</span><strong>${formatIDR(totalSalarySum)}</strong><small>+5.4% from last month</small><i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg></i></article>
+        <article><span>Total Allowances</span><strong>${formatIDR(totalAllowanceSum)}</strong><small>+3.6% from last month</small><i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg></i></article>
+        <article><span>Total Overtime</span><strong>${formatIDR(totalOvertimeSum)}</strong><small>+2.3% from last month</small><i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></i></article>
+        <article><span>Total Incentives</span><strong>${formatIDR(totalIncentiveSum)}</strong><small>+4.9% from last month</small><i><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg></i></article>
       </div>
       <div class="payroll-chart-grid">
         ${section('Payroll Overview', `
@@ -2528,11 +2528,11 @@ function pageMarkup(key) {
       </div>
       ${section('Payroll List', `
         <div class="module-toolbar">
-          <label class="module-search">🔍 <input data-filter="payroll" placeholder="Search employee, ID, etc" /></label>
+          <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="payroll" placeholder="Search employee, ID, etc" /></label>
           <button class="date-filter" data-action="payroll-filter">Filter <span>⌄</span></button>
           <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
             <button class="module-button primary" data-action="new-payrun">+ New Pay Run</button>
-            <button class="module-button secondary" data-action="export-payroll">📥 Ekspor Laporan</button>
+            <button class="module-button secondary" data-action="export-payroll">Ekspor Laporan</button>
           </div>
         </div>
         <div class="module-table-wrap">
@@ -2627,7 +2627,7 @@ function pageMarkup(key) {
       </div>
       ${section('Leave Request', `
         <div class="module-toolbar">
-          <label class="module-search">🔍 <input data-filter="leave" placeholder="Search employee, reason, etc" /></label>
+          <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="leave" placeholder="Search employee, reason, etc" /></label>
           <button class="date-filter" data-action="leave-filter">Filter <span>⌄</span></button>
           <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
             <button class="module-button primary" data-action="request-leave">+ Request Leave</button>
@@ -2812,7 +2812,7 @@ function pageMarkup(key) {
               </div>
             </div>
             <div class="module-toolbar">
-              <label class="module-search">🔍 <input data-filter="recruitment" placeholder="Search applicant" /></label>
+              <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="recruitment" placeholder="Search applicant" /></label>
               <button class="module-button primary" data-action="add-candidate">+ Add Applicant</button>
             </div>
             <div class="module-table-wrap">
@@ -3277,7 +3277,7 @@ function pageMarkup(key) {
             <div class="module-card-head">
               <h2>Daftar Target &amp; Indikator Kinerja (KPI)</h2>
               <div class="module-heading-actions">
-                <label class="module-search">🔍 <input data-filter="kpi" id="kpiSearchInput" placeholder="Cari indikator KPI, PIC, atau divisi..." /></label>
+                <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="kpi" id="kpiSearchInput" placeholder="Cari indikator KPI, PIC, atau divisi..." /></label>
                 ${!supervisorDept ? `<div class="filter-dropdown-wrap">
                   <button class="date-filter" data-action="kpi-dept-filter" id="kpiDeptFilterBtn">${moduleView.dataset.kpiDeptFilter || 'Semua Divisi'} <span>⌄</span></button>
                 </div>` : ''}
@@ -5369,7 +5369,7 @@ mainContentArea.addEventListener('click', async (event) => {
       showToast(err.message || 'Gagal membaca lokasi GPS perangkat.');
     } finally {
       btn.disabled = false;
-      btn.textContent = '📍 Gunakan GPS Saya';
+      btn.textContent = 'Gunakan GPS Saya';
     }
     return;
   }
@@ -6990,11 +6990,11 @@ function setupDashboardControls() {
 
       popover.innerHTML = `
         <div class="kebab-popover-head">${safe(cardTitle)}</div>
-        ${isTaskPanel ? `<button type="button" data-kebab-opt="add-task">➕ Tambah Tugas Baru</button>` : ''}
-        ${isNotesPanel ? `<button type="button" data-kebab-opt="add-note">📝 Tambah Catatan HR</button>` : ''}
-        <button type="button" data-kebab-opt="export">📥 Ekspor Data (CSV)</button>
-        <button type="button" data-kebab-opt="print">🖨️ Cetak Bagian Ini</button>
-        <button type="button" data-kebab-opt="refresh">🔄 Muat Ulang Data</button>
+        ${isTaskPanel ? `<button type="button" data-kebab-opt="add-task">Tambah Tugas Baru</button>` : ''}
+        ${isNotesPanel ? `<button type="button" data-kebab-opt="add-note">Tambah Catatan HR</button>` : ''}
+        <button type="button" data-kebab-opt="export">Ekspor Data (CSV)</button>
+        <button type="button" data-kebab-opt="print">Cetak Bagian Ini</button>
+        <button type="button" data-kebab-opt="refresh">Muat Ulang Data</button>
       `;
 
       document.body.appendChild(popover);
@@ -7353,10 +7353,49 @@ document.addEventListener('submit', (event) => {
 
 
 /* ==========================================================================
-   Initial Application Launch
+   Initial Application Launch & Mobile Navigation Drawer
    ========================================================================== */
 
+function setupMobileNavigationDrawer() {
+  const topbar = document.querySelector('.topbar');
+  const sidebar = document.querySelector('.sidebar');
+  if (!topbar || !sidebar || document.querySelector('#mobileMenuToggle')) return;
+
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.id = 'mobileMenuToggle';
+  btn.className = 'mobile-menu-btn';
+  btn.setAttribute('aria-label', 'Buka Menu Navigasi');
+  btn.setAttribute('aria-expanded', 'false');
+  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`;
+  topbar.insertBefore(btn, topbar.firstChild);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'mobile-sidebar-backdrop';
+  backdrop.hidden = true;
+  document.body.appendChild(backdrop);
+
+  const closeMenu = () => {
+    sidebar.classList.remove('mobile-open');
+    backdrop.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+  };
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    const isOpen = sidebar.classList.toggle('mobile-open');
+    backdrop.hidden = !isOpen;
+    btn.setAttribute('aria-expanded', String(isOpen));
+  });
+
+  backdrop.addEventListener('click', closeMenu);
+  sidebar.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', closeMenu);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+  setupMobileNavigationDrawer();
   renderDashboardMiniCalendar();
   renderDashboardScheduleList();
   renderDashboardSummary();
@@ -7367,6 +7406,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // Run immediately in case script loads after DOM ready
+setupMobileNavigationDrawer();
 renderDashboardMiniCalendar();
 renderDashboardScheduleList();
 updateNotificationBadge();

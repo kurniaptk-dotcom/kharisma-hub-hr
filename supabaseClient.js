@@ -62,8 +62,8 @@
       const latency = Math.round(performance.now() - startTime);
 
       if (error) {
-        // Table might not exist yet or key invalid
-        if (error.code === '42P01') {
+        // Table might not exist yet or schema cache pending migration
+        if (error.code === '42P01' || error.code === 'PGRST205' || (error.message && error.message.includes('schema cache'))) {
           isConnected = true;
           dispatchStatus(true, `Terhubung ke Supabase (${latency}ms) — Skema tabel perlu dijalankan`);
           return { ok: true, latency, message: 'Tabel database belum dibuat di Supabase' };

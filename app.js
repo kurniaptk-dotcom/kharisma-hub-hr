@@ -115,14 +115,16 @@ function installSupabaseAuthGate() {
       window.KharismaDB.attendance.getAll(),
       window.KharismaDB.calendar.getAll([])
     ]);
-    employeeData.splice(0, employeeData.length, ...employees);
+    if (employees && employees.length) {
+      employeeData.splice(0, employeeData.length, ...employees);
+    }
     employeeData.forEach(person => { if (person[5] && /^EMP-/.test(person[5])) employeeIdByName.set(person[0], person[5].replace(/^EMP-/, '')); });
     Object.keys(employeeProfileOverrides).forEach(name => delete employeeProfileOverrides[name]);
     Object.assign(employeeProfileOverrides, window.__kharismaEmployeeProfiles || {});
-    kpiData.splice(0, kpiData.length, ...kpis);
-    leaveRequests.splice(0, leaveRequests.length, ...leaves);
-    cloudAttendanceRecords = attendance;
-    calendarItems.splice(0, calendarItems.length, ...calendar);
+    if (kpis && kpis.length) kpiData.splice(0, kpiData.length, ...kpis);
+    if (leaves && leaves.length) leaveRequests.splice(0, leaveRequests.length, ...leaves);
+    if (attendance && attendance.length) cloudAttendanceRecords = attendance;
+    if (calendar && calendar.length) calendarItems.splice(0, calendarItems.length, ...calendar);
     persistEmployeeData(); persistKpiData(); persistLeaveRequests(); writeStoredValue('teamhub.calendarItems', calendarItems);
   };
   const applySession = async session => {

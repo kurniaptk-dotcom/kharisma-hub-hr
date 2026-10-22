@@ -14,6 +14,7 @@
   'use strict';
 
   const DEFAULT_SUPABASE_URL = 'https://wirgqezinegebauddmgy.supabase.co';
+  const DEFAULT_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndpcmdxZXppbmVnZWJhdWRkbWd5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA4MzIyNjUsImV4cCI6MjEwNjQwODI2NX0.3SLfTNOq0Wa5fawsybrf0dLlrkJE7EqyYXuu5ihDmPM';
   let SUPABASE_URL = DEFAULT_SUPABASE_URL;
   const STORAGE_KEY_ANON = 'kharisma_supabase_anon_key';
   const STORAGE_KEY_QUEUE = 'kharisma_offline_sync_queue';
@@ -21,8 +22,8 @@
   let anonKey = (typeof window !== 'undefined' && (
     window.__ENV?.SUPABASE_ANON_KEY || 
     localStorage.getItem(STORAGE_KEY_ANON) || 
-    ''
-  )) || '';
+    DEFAULT_ANON_KEY
+  )) || DEFAULT_ANON_KEY;
 
   let client = null;
   let isConnected = false;

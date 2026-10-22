@@ -7,8 +7,18 @@
     <script>
       (function() {
         try {
-          const hasSession = Object.keys(localStorage).some(function(k) { return k.startsWith('sb-') && k.endsWith('-auth-token'); }) || localStorage.getItem('kharisma_auth_active');
-          if (!hasSession) {
+          var valid = false;
+          for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+              try {
+                var d = JSON.parse(localStorage.getItem(k));
+                if (d && d.access_token) { valid = true; break; }
+              } catch (e) {}
+            }
+          }
+          if (!valid) {
+            try { localStorage.removeItem('kharisma_auth_active'); sessionStorage.removeItem('kharisma_auth_active'); } catch (e) {}
             window.location.replace('login.html');
           }
         } catch (e) {}

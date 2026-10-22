@@ -13,9 +13,29 @@
     <script>
       (function() {
         try {
-          const hasSession = Object.keys(localStorage).some(k => k.startsWith('sb-') && k.endsWith('-auth-token')) || localStorage.getItem('kharisma_auth_active');
-          if (hasSession && !window.location.search.includes('force=1')) {
+          if (window.location.search.includes('force=1') || window.location.search.includes('logout=1')) {
+            for (const k of Object.keys(localStorage)) {
+              if (k.startsWith('sb-') || k.includes('kharisma')) localStorage.removeItem(k);
+            }
+            return;
+          }
+          let validSession = false;
+          for (const k of Object.keys(localStorage)) {
+            if (k.startsWith('sb-') && k.endsWith('-auth-token')) {
+              try {
+                const tokenData = JSON.parse(localStorage.getItem(k));
+                if (tokenData?.access_token) {
+                  validSession = true;
+                  break;
+                }
+              } catch {}
+            }
+          }
+          if (validSession) {
             window.location.replace('index.html');
+          } else {
+            localStorage.removeItem('kharisma_auth_active');
+            sessionStorage.removeItem('kharisma_auth_active');
           }
         } catch {}
       })();

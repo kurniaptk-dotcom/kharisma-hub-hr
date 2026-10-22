@@ -74,15 +74,25 @@ function installSupabaseAuthGate() {
   const root = document.querySelector('.app-shell');
   if (!root) return;
 
-  const hasCachedSession = Boolean(
-    (typeof localStorage !== 'undefined' &&
-      Object.keys(localStorage).some(k => k.startsWith('sb-') && k.endsWith('-auth-token'))) ||
-    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('kharisma_auth_active')) ||
-    (typeof localStorage !== 'undefined' && localStorage.getItem('kharisma_auth_active'))
-  );
+  let validSession = false;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith('sb-') && k.endsWith('-auth-token')) {
+        const d = JSON.parse(localStorage.getItem(k));
+        if (d && d.access_token) { validSession = true; break; }
+      }
+    }
+  } catch {}
 
-  if (!hasCachedSession) {
-    window.location.replace('login.html');
+  if (!validSession) {
+    try {
+      localStorage.removeItem('kharisma_auth_active');
+      sessionStorage.removeItem('kharisma_auth_active');
+    } catch {}
+    if (!window.location.pathname.endsWith('login.html') && !window.location.pathname.endsWith('/login')) {
+      window.location.replace('login.html');
+    }
     return;
   }
 
@@ -215,6 +225,13 @@ function installSupabaseAuthGate() {
     if (session) {
       applySession(session);
     } else {
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('sb-') || k.includes('kharisma'))) localStorage.removeItem(k);
+        }
+        sessionStorage.removeItem('kharisma_auth_active');
+      } catch {}
       window.location.replace('login.html');
     }
   }).catch(() => {});

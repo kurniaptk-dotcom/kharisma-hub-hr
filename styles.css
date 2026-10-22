@@ -3609,3 +3609,402 @@ body{color:var(--text);background:#f8fafc;font-size:14px;line-height:1.45}
   #moduleView[data-page='attendance'] .attendance-self-service { padding: 14px; }
   #moduleView[data-page='attendance'] .attendance-timeline { grid-template-columns: minmax(0, 1fr); }
 }
+
+
+/* ==========================================================================
+   Interactive Motion System (motion.js companion)
+   Calm, purposeful motion — no gradients, no neon glow.
+   ========================================================================== */
+:root {
+  --kh-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --kh-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --kh-fast: 160ms;
+  --kh-med: 260ms;
+  --kh-shadow-rest: 0 1px 3px rgba(12, 30, 54, 0.04);
+  --kh-shadow-hover: 0 12px 28px rgba(12, 30, 54, 0.09), 0 2px 6px rgba(12, 30, 54, 0.05);
+}
+
+/* ---------- Page enter / leave ---------- */
+@keyframes khPageIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+.main-content { animation: khPageIn 380ms var(--kh-ease) both; }
+body.kh-page-leave .main-content {
+  opacity: 0;
+  transform: translateY(-4px);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+/* ---------- Sticky topbar with scroll state ---------- */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: #f8fafc;
+  transition: box-shadow var(--kh-med) var(--kh-ease), border-color var(--kh-med) ease;
+  border-bottom: 1px solid transparent;
+}
+.topbar.is-scrolled {
+  border-bottom-color: #e2e8f0;
+  box-shadow: 0 6px 16px -10px rgba(12, 30, 54, 0.25);
+}
+
+/* ---------- Reveal (entrance + scroll) ---------- */
+.reveal {
+  opacity: 0;
+  transform: translateY(14px) scale(0.985);
+}
+.reveal.revealed {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 520ms var(--kh-ease) var(--reveal-delay, 0ms),
+    transform 620ms var(--kh-ease) var(--reveal-delay, 0ms),
+    box-shadow var(--kh-med) var(--kh-ease),
+    border-color var(--kh-med) ease;
+}
+
+/* ---------- Card hover lift ---------- */
+.summary-card,
+.dashboard-grid .panel,
+.module-card,
+.attendance-status,
+.att-meta-card,
+.kpi-stat-card,
+.employee-card,
+.employee-stat,
+.calendar-stat,
+.payroll-stats article,
+.leave-stats > article,
+.dept-manage-card,
+.stat-mini-card,
+.vacancy-box,
+.schedule-card,
+.rec-event-item {
+  transition:
+    transform var(--kh-med) var(--kh-ease),
+    box-shadow var(--kh-med) var(--kh-ease),
+    border-color var(--kh-med) ease,
+    background-color var(--kh-fast) ease;
+  will-change: transform;
+}
+@media (hover: hover) {
+  .summary-card:hover,
+  .dashboard-grid .panel:hover,
+  .attendance-status:hover,
+  .kpi-stat-card:hover,
+  .employee-card:hover,
+  .employee-stat:hover,
+  .calendar-stat:hover,
+  .payroll-stats article:hover,
+  .leave-stats > article:hover,
+  .dept-manage-card:hover,
+  .stat-mini-card:hover,
+  .vacancy-box:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--kh-shadow-hover);
+    border-color: #cfe0fb;
+  }
+  .module-card:not(.attendance-self-service):hover {
+    box-shadow: var(--kh-shadow-hover);
+    border-color: #dbe7fb;
+  }
+  #moduleView[data-page='attendance'] .att-meta-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(12, 30, 54, 0.16);
+  }
+  .schedule-card:hover,
+  .rec-event-item:hover {
+    transform: translateX(3px);
+    background: #eef4fe;
+  }
+}
+
+/* Icons inside cards respond to hover */
+.att-status-icon,
+.att-meta-icon,
+.att-chart-icon,
+.att-title-icon,
+.stat-mini-icon,
+.dept-badge-icon {
+  transition: transform var(--kh-med) var(--kh-ease-spring);
+}
+@media (hover: hover) {
+  .attendance-status:hover .att-status-icon,
+  .att-meta-card:hover .att-meta-icon,
+  .stat-mini-card:hover .stat-mini-icon,
+  .dept-manage-card:hover .dept-badge-icon {
+    transform: scale(1.1) rotate(-6deg);
+  }
+}
+
+/* ---------- Buttons: press + ripple ---------- */
+.module-button,
+.att-main-cta-btn,
+.att-sub-btn,
+.topbar-absen-btn,
+.dash-absen-btn,
+.date-filter,
+.top-icon,
+.cloud-badge,
+.kebab,
+.folder-button,
+.kpi-tab-btn,
+.sidebar-promo a,
+.send-button {
+  transition:
+    transform var(--kh-fast) var(--kh-ease),
+    background-color var(--kh-fast) ease,
+    border-color var(--kh-fast) ease,
+    color var(--kh-fast) ease,
+    box-shadow var(--kh-fast) ease;
+}
+.module-button:active,
+.att-main-cta-btn:active,
+.att-sub-btn:active,
+.topbar-absen-btn:active,
+.dash-absen-btn:active,
+.date-filter:active,
+.top-icon:active,
+.cloud-badge:active,
+.kebab:active,
+.folder-button:active,
+.kpi-tab-btn:active,
+.sidebar-promo a:active,
+.send-button:active {
+  transform: scale(0.96);
+}
+@media (hover: hover) {
+  .module-button.primary:hover { box-shadow: 0 6px 14px rgba(9, 98, 234, 0.22); transform: translateY(-1px); }
+  .top-icon:hover { border-color: #bfdbfe; color: #0962ea; background: #f0f6ff; transform: translateY(-1px); }
+  .date-filter:hover { background: #dbeafe; }
+}
+.kh-ripple-host { position: relative; overflow: hidden; isolation: isolate; }
+.kh-ripple {
+  position: absolute;
+  z-index: 0;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.18;
+  transform: scale(0);
+  pointer-events: none;
+  animation: khRipple 560ms var(--kh-ease) forwards;
+}
+@keyframes khRipple {
+  to { transform: scale(1); opacity: 0; }
+}
+
+/* ---------- Sidebar navigation ---------- */
+.nav-link {
+  position: relative;
+  transition: background-color var(--kh-fast) ease, color var(--kh-fast) ease, padding-left var(--kh-med) var(--kh-ease);
+}
+.nav-link .nav-icon { transition: transform var(--kh-med) var(--kh-ease-spring); }
+@media (hover: hover) {
+  .nav-link:not(.active):hover { padding-left: 14px; }
+  .nav-link:hover .nav-icon { transform: scale(1.12); }
+}
+.nav-link.active::before {
+  content: '';
+  position: absolute;
+  left: -11px;
+  top: 50%;
+  width: 4px;
+  height: 60%;
+  border-radius: 0 4px 4px 0;
+  background: #0962ea;
+  transform: translateY(-50%);
+  animation: khIndicator 420ms var(--kh-ease-spring) both;
+}
+@keyframes khIndicator {
+  from { height: 0; opacity: 0; }
+  to { height: 60%; opacity: 1; }
+}
+@media (max-width: 900px) { .nav-link.active::before { display: none; } }
+
+/* ---------- Tables ---------- */
+.module-table tbody tr,
+#employeeRows tr {
+  transition: background-color var(--kh-fast) ease, box-shadow var(--kh-fast) ease;
+}
+.module-table tbody tr:hover,
+#employeeRows tr:hover {
+  background: #f4f8fe;
+  box-shadow: inset 3px 0 0 #0962ea;
+}
+.employee-link .avatar,
+.att-avatar-wrap .avatar { transition: transform var(--kh-med) var(--kh-ease-spring); }
+@media (hover: hover) {
+  .employee-link:hover .avatar,
+  .employee-link:hover .att-avatar-wrap .avatar { transform: scale(1.08); }
+  .employee-link:hover strong { color: #0962ea; }
+}
+.status { transition: transform var(--kh-fast) var(--kh-ease); }
+tr:hover .status { transform: scale(1.04); }
+
+/* ---------- Charts: bars grow, lines draw ---------- */
+@keyframes khGrowY { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+@keyframes khGrowX { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes khDraw { from { stroke-dashoffset: 600; } to { stroke-dashoffset: 0; } }
+@keyframes khFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.reveal.revealed .bar-track,
+.reveal.revealed .team-bars i,
+.reveal.revealed .department-bars i,
+.reveal.revealed .logged-hours-chart i,
+.reveal.revealed .leave-chart i {
+  transform-origin: bottom;
+  animation: khGrowY 800ms var(--kh-ease) both;
+  animation-delay: calc(var(--reveal-delay, 0ms) + 120ms);
+}
+.reveal.revealed .attendance-bar-col:nth-child(2) .bar-track { animation-delay: calc(var(--reveal-delay, 0ms) + 180ms); }
+.reveal.revealed .attendance-bar-col:nth-child(3) .bar-track { animation-delay: calc(var(--reveal-delay, 0ms) + 240ms); }
+.reveal.revealed .attendance-bar-col:nth-child(4) .bar-track { animation-delay: calc(var(--reveal-delay, 0ms) + 300ms); }
+.reveal.revealed .attendance-bar-col:nth-child(5) .bar-track { animation-delay: calc(var(--reveal-delay, 0ms) + 360ms); }
+.reveal.revealed .attendance-bar-col:nth-child(6) .bar-track { animation-delay: calc(var(--reveal-delay, 0ms) + 420ms); }
+
+.reveal.revealed .employment-bar,
+.reveal.revealed .kpi-dept-fill,
+.reveal.revealed .kpi-mini-track span,
+.reveal.revealed .resource-track span {
+  transform-origin: left;
+  animation: khGrowX 900ms var(--kh-ease) both;
+  animation-delay: calc(var(--reveal-delay, 0ms) + 150ms);
+}
+
+.reveal.revealed .chart-line,
+.reveal.revealed .detail-chart-line,
+.reveal.revealed .att-card-spark path[stroke],
+.reveal.revealed .trend-plot svg path,
+.reveal.revealed .payroll-lines svg path {
+  stroke-dasharray: 600;
+  animation: khDraw 1200ms var(--kh-ease) both;
+  animation-delay: calc(var(--reveal-delay, 0ms) + 150ms);
+}
+.reveal.revealed .chart-area-fill,
+.reveal.revealed .detail-chart-fill,
+.reveal.revealed .att-card-spark path[fill]:not([fill='none']) {
+  animation: khFadeIn 900ms ease both;
+  animation-delay: calc(var(--reveal-delay, 0ms) + 500ms);
+}
+.reveal.revealed .chart-tooltip,
+.reveal.revealed .detail-chart-tooltip {
+  animation: khPopIn 420ms var(--kh-ease-spring) both;
+  animation-delay: calc(var(--reveal-delay, 0ms) + 1000ms);
+}
+@keyframes khPopIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.9); }
+  to { opacity: 1; transform: none; }
+}
+.reveal.revealed .heat-row i {
+  animation: khPopIn 360ms var(--kh-ease) both;
+  animation-delay: calc(var(--reveal-delay, 0ms) + 200ms);
+}
+.reveal.revealed .heat-row:nth-child(2) i { animation-delay: calc(var(--reveal-delay, 0ms) + 260ms); }
+.reveal.revealed .heat-row:nth-child(3) i { animation-delay: calc(var(--reveal-delay, 0ms) + 320ms); }
+.reveal.revealed .heat-row:nth-child(4) i { animation-delay: calc(var(--reveal-delay, 0ms) + 380ms); }
+.reveal.revealed .heat-row:nth-child(5) i { animation-delay: calc(var(--reveal-delay, 0ms) + 440ms); }
+.reveal.revealed .heat-row:nth-child(6) i { animation-delay: calc(var(--reveal-delay, 0ms) + 500ms); }
+.heat-row i { transition: transform var(--kh-fast) var(--kh-ease); }
+.heat-row i:hover { transform: scale(1.25); }
+
+.bar-track { transition: transform var(--kh-fast) var(--kh-ease); }
+.attendance-bar-col:hover .bar-track { transform: scaleY(1.04); }
+.attendance-bar-col:hover .bar-col-label { color: #0962ea; font-weight: 700; }
+
+/* ---------- Live indicators ---------- */
+@keyframes khPulseRing {
+  0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.55); }
+  70% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+#moduleView[data-page='attendance'] .live-pulse-dot { animation: khPulseRing 2s ease-out infinite; }
+@keyframes khBlueRing {
+  0% { box-shadow: 0 0 0 0 rgba(9, 98, 234, 0.35); }
+  70% { box-shadow: 0 0 0 7px rgba(9, 98, 234, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(9, 98, 234, 0); }
+}
+.topbar-absen-btn.state-checkin,
+.dash-absen-btn.state-checkin { animation: khBlueRing 2.4s ease-out infinite; }
+.att-online-dot.online { animation: khDotBlink 2.6s ease-in-out infinite; }
+@keyframes khDotBlink { 50% { transform: scale(0.8); } }
+.notification-icon i { animation: khDotBlink 2s ease-in-out infinite; }
+
+/* Watermark clock gently ticks */
+@keyframes khTilt {
+  0%, 100% { transform: translateY(-50%) rotate(-12deg); }
+  50% { transform: translateY(-52%) rotate(-6deg); }
+}
+#moduleView[data-page='attendance'] .att-watermark-clock { animation: khTilt 6s ease-in-out infinite; }
+
+/* Main CTA arrow nudge */
+#moduleView[data-page='attendance'] .att-main-cta-btn svg { transition: transform var(--kh-med) var(--kh-ease-spring); }
+#moduleView[data-page='attendance'] .att-main-cta-btn:hover svg { transform: translateX(3px) scale(1.15); }
+
+/* ---------- Dialogs, dropdowns, toast ---------- */
+@keyframes khDialogIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.97); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes khBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+.record-dialog[open] { animation: khDialogIn 300ms var(--kh-ease) both; }
+.record-dialog[open]::backdrop { animation: khBackdropIn 240ms ease both; }
+
+@keyframes khDropIn {
+  from { opacity: 0; transform: translateY(-6px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+.filter-dropdown-menu,
+.global-search-dropdown,
+.kebab-popover-menu { animation: khDropIn 200ms var(--kh-ease) both; transform-origin: top right; }
+.filter-dropdown-menu button,
+.search-result-item { transition: background-color var(--kh-fast) ease, padding-left var(--kh-fast) var(--kh-ease); }
+.filter-dropdown-menu button:hover { padding-left: 14px; }
+
+.toast {
+  transform: translateY(16px) scale(0.96);
+  transition: opacity 240ms var(--kh-ease), transform 320ms var(--kh-ease-spring);
+}
+.toast.show { transform: none; }
+
+/* ---------- Inputs & focus ---------- */
+.search-box,
+.module-search,
+.module-select,
+.module-toolbar select {
+  transition: border-color var(--kh-fast) ease, box-shadow var(--kh-fast) ease, background-color var(--kh-fast) ease;
+}
+.search-box:focus-within,
+.module-search:focus-within {
+  border-color: #0962ea;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(9, 98, 234, 0.12);
+}
+.search-box:focus-within .search-icon,
+.module-search:focus-within .search-icon { color: #0962ea; }
+:where(button, a, select, input, [tabindex]):focus-visible {
+  outline: 2px solid #0962ea;
+  outline-offset: 2px;
+}
+
+/* ---------- Task checkbox micro-interaction ---------- */
+.task-row input { transition: transform var(--kh-fast) var(--kh-ease-spring), background-color var(--kh-fast) ease; }
+.task-row input:checked { animation: khCheck 320ms var(--kh-ease-spring); }
+@keyframes khCheck { 50% { transform: scale(1.3); } }
+.task-row span strong { transition: color var(--kh-med) ease; }
+
+/* ---------- Dark mode topbar ---------- */
+body.theme-dark .topbar { background: #08111e; }
+body.theme-dark .topbar.is-scrolled { border-bottom-color: #1a2c47; }
+
+/* ---------- Reduced motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reveal { opacity: 1 !important; transform: none !important; }
+}

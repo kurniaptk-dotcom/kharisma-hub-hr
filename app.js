@@ -610,7 +610,7 @@ function persistCalendarItems() {
    ========================================================================== */
 
 const defaultLeaveRequests = [
-  { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2035', period: '20-22 Jun 2035', duration: '3 Days', reason: 'Doctor's note attached', status: 'Approved' },
+  { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2035', period: '20-22 Jun 2035', duration: '3 Days', reason: "Doctor\'s note attached", status: 'Approved' },
   { id: 'lv-2', name: 'Jacob Yuen', title: 'Site Supervisor', type: 'Annual Leave', submitDate: '10 Jun 2035', period: '17-21 Jun 2035', duration: '5 Days', reason: 'Family trip', status: 'Approved' },
   { id: 'lv-3', name: 'Anya Rodriguez', title: 'Graphic Designer', type: 'Other Leave', submitDate: '17 Jun 2035', period: '19 Jun 2035', duration: '1 Day', reason: 'Personal matter', status: 'Pending' },
   { id: 'lv-4', name: 'Olivia Mason', title: 'Marketing', type: 'Annual Leave', submitDate: '02 Jun 2035', period: '05-07 Jun 2035', duration: '3 Days', reason: 'Conference attendance', status: 'Approved' },
@@ -839,7 +839,7 @@ let sentMail = [
   { id: 'sent-2', from: 'Davis Levin', email: 'davis.levin@kharismahub.com', subject: 'Welcome aboard!', preview: 'We are excited to have you join the Kharisma Hub team.', time: 'Yesterday', date: '18 Jun', initials: 'DL', color: 'avatar-davis', label: 'HR', body: ['Welcome aboard! We are excited to have you join the Kharisma Hub team.', 'Best, Davis'], unread: false, starred: false },
 ];
 let draftMail = [
-  { id: 'draft-1', from: 'Davis Levin', email: 'davis.levin@kharismahub.com', subject: 'Draft: July planning', preview: 'A few notes for next month's planning meeting...', time: 'Yesterday', date: '18 Jun', initials: 'DL', color: 'avatar-davis', label: 'HR', body: ['A few notes for next month's planning meeting...'], unread: false, starred: false },
+  { id: 'draft-1', from: 'Davis Levin', email: 'davis.levin@kharismahub.com', subject: 'Draft: July planning', preview: 'A few notes for next month\'s planning meeting...', time: 'Yesterday', date: '18 Jun', initials: 'DL', color: 'avatar-davis', label: 'HR', body: ['A few notes for next month\'s planning meeting...'], unread: false, starred: false },
 ];
 let archivedMail = [];
 let trashedMail = [];

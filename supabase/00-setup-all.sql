@@ -65,7 +65,7 @@ create table if not exists public.employees (
   title text not null,
   employment_type text default 'Full-Time',
   work_model text default 'Hybrid',
-  join_date text default '12 Jan 2034',
+  join_date text default '12 Jan 2026',
   status text default 'On-Time',
   gender text default 'Not provided',
   birth_date text default 'Not provided',
@@ -112,7 +112,7 @@ create table if not exists public.kpi_indicators (
   title text not null,
   dept text not null,
   pic text not null,
-  period text default 'Q2 2035',
+  period text default 'Q2 2026',
   weight integer default 20,
   target numeric not null,
   actual numeric default 0,
@@ -193,24 +193,24 @@ insert into public.departments (id, name, code, head, budget, description) value
 on conflict (id) do nothing;
 
 insert into public.employees (id, name, email, department, title, employment_type, work_model, join_date, status, avatar_idx) values
-  ('EMP-0234', 'Olivia Mason', 'olivia.mason@kharismahub.com', 'Marketing', 'Executive Marketing', 'Full-Time', 'Hybrid', '12 Jan 2034', 'On-Time', 1),
-  ('EMP-0178', 'Ethan Ray', 'ethan.ray@kharismahub.com', 'Product Design', 'UI Designer', 'Full-Time', 'Remote', '03 Mar 2033', 'Late', 2),
-  ('EMP-0312', 'Lina Armand', 'lina.armand@kharismahub.com', 'R&D', 'Lab Analyst', 'Part-Time', 'On-Site', '22 Jul 2034', 'On Leave', 3),
-  ('EMP-0115', 'Jacob Yuen', 'jacob.yuen@kharismahub.com', 'Operations', 'Site Supervisor', 'Full-Time', 'On-Site', '05 Sep 2032', 'Absent', 4),
-  ('EMP-0289', 'Mia Torres', 'mia.torres@kharismahub.com', 'Human Resources', 'HR Officer', 'Full-Time', 'Hybrid', '14 Feb 2033', 'On-Time', 5),
-  ('EMP-0356', 'Sara Kim', 'sara.kim@kharismahub.com', 'Customer Service', 'Customer Support Intern', 'Internship', 'On-Site', '10 May 2035', 'Late', 6),
-  ('EMP-0291', 'Daniel Cheung', 'daniel.cheung@kharismahub.com', 'Operations', 'Compliance Specialist', 'Full-Time', 'Remote', '19 Nov 2033', 'On-Time', 7),
-  ('EMP-0275', 'Anya Rodriguez', 'anya.rodriguez@kharismahub.com', 'Marketing', 'Graphic Designer', 'Part-Time', 'Remote', '06 Apr 2035', 'Late', 8),
-  ('EMP-0159', 'Kelvin Yu', 'kelvin.yu@kharismahub.com', 'Human Resources', 'Training Coordinator', 'Full-Time', 'On-Site', '27 Jun 2032', 'On-Time', 9),
-  ('EMP-0320', 'Farah Nabila', 'farah.nabila@kharismahub.com', 'Customer Service', 'Customer Experience Lead', 'Full-Time', 'Hybrid', '08 Aug 2034', 'On-Time', 1),
-  ('EMP-0362', 'Juno Park', 'juno.park@kharismahub.com', 'Product Design', 'UX Researcher', 'Full-Time', 'Hybrid', '15 Apr 2034', 'On-Time', 2),
-  ('EMP-0265', 'Hana Putri', 'hana.putri@kharismahub.com', 'Human Resources', 'Recruitment Assistant', 'Internship', 'On-Site', '20 Feb 2035', 'On-Time', 3)
+  ('EMP-0234', 'Olivia Mason', 'olivia.mason@kharismahub.com', 'Marketing', 'Executive Marketing', 'Full-Time', 'Hybrid', '12 Jan 2024', 'On-Time', 1),
+  ('EMP-0178', 'Ethan Ray', 'ethan.ray@kharismahub.com', 'Product Design', 'UI Designer', 'Full-Time', 'Remote', '03 Mar 2024', 'Late', 2),
+  ('EMP-0312', 'Lina Armand', 'lina.armand@kharismahub.com', 'R&D', 'Lab Analyst', 'Part-Time', 'On-Site', '22 Jul 2024', 'On Leave', 3),
+  ('EMP-0115', 'Jacob Yuen', 'jacob.yuen@kharismahub.com', 'Operations', 'Site Supervisor', 'Full-Time', 'On-Site', '05 Sep 2023', 'Absent', 4),
+  ('EMP-0289', 'Mia Torres', 'mia.torres@kharismahub.com', 'Human Resources', 'HR Officer', 'Full-Time', 'Hybrid', '14 Feb 2024', 'On-Time', 5),
+  ('EMP-0356', 'Sara Kim', 'sara.kim@kharismahub.com', 'Customer Service', 'Customer Support Intern', 'Internship', 'On-Site', '10 May 2025', 'Late', 6),
+  ('EMP-0291', 'Daniel Cheung', 'daniel.cheung@kharismahub.com', 'Operations', 'Compliance Specialist', 'Full-Time', 'Remote', '19 Nov 2024', 'On-Time', 7),
+  ('EMP-0275', 'Anya Rodriguez', 'anya.rodriguez@kharismahub.com', 'Marketing', 'Graphic Designer', 'Part-Time', 'Remote', '06 Apr 2025', 'Late', 8),
+  ('EMP-0159', 'Kelvin Yu', 'kelvin.yu@kharismahub.com', 'Human Resources', 'Training Coordinator', 'Full-Time', 'On-Site', '27 Jun 2023', 'On-Time', 9),
+  ('EMP-0320', 'Farah Nabila', 'farah.nabila@kharismahub.com', 'Customer Service', 'Customer Experience Lead', 'Full-Time', 'Hybrid', '08 Aug 2024', 'On-Time', 1),
+  ('EMP-0362', 'Juno Park', 'juno.park@kharismahub.com', 'Product Design', 'UX Researcher', 'Full-Time', 'Hybrid', '15 Apr 2024', 'On-Time', 2),
+  ('EMP-0265', 'Hana Putri', 'hana.putri@kharismahub.com', 'Human Resources', 'Recruitment Assistant', 'Internship', 'On-Site', '20 Feb 2025', 'On-Time', 3)
 on conflict (id) do nothing;
 
 insert into public.kpi_indicators (id, title, dept, pic, target, actual, unit, weight, period, status, notes) values
-  ('kpi-1', 'Customer Satisfaction Score (CSAT)', 'Customer Service', 'Olivia Mason', 90, 95.2, '%', 25, 'Q2 2035', 'Exceeded', 'Survei kepuasan pelanggan mencapai rekor tertinggi kuartal ini.'),
-  ('kpi-2', 'Design System Component Coverage', 'Product Design', 'Ethan Ray', 85, 92.4, '%', 30, 'Q2 2035', 'Exceeded', '45 komponen baru dipublikasikan ke Figma & Storybook.'),
-  ('kpi-3', 'Employee Retention Rate', 'Human Resources', 'Mia Torres', 95, 96.8, '%', 35, 'Q2 2035', 'Exceeded', 'Turnover turun 2.4% dari bulan lalu dengan program baru.')
+  ('kpi-1', 'Customer Satisfaction Score (CSAT)', 'Customer Service', 'Olivia Mason', 90, 95.2, '%', 25, 'Q2 2026', 'Exceeded', 'Survei kepuasan pelanggan mencapai rekor tertinggi kuartal ini.'),
+  ('kpi-2', 'Design System Component Coverage', 'Product Design', 'Ethan Ray', 85, 92.4, '%', 30, 'Q2 2026', 'Exceeded', '45 komponen baru dipublikasikan ke Figma & Storybook.'),
+  ('kpi-3', 'Employee Retention Rate', 'Human Resources', 'Mia Torres', 95, 96.8, '%', 35, 'Q2 2026', 'Exceeded', 'Turnover turun 2.4% dari bulan lalu dengan program baru.')
 on conflict (id) do nothing;
 
 -- 13. PASTIKAN AKUN ADMIN KURNIAPTK TERVERIFIKASI

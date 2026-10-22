@@ -9,11 +9,15 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261022_1700" />
+    <link rel="stylesheet" href="./styles.css?v=20261022_1830" />
     <script>
       (function() {
         try {
-          if (window.location.search.includes('force=1') || window.location.search.includes('logout=1')) {
+          const hashStr = String(window.location.hash || '');
+          if (hashStr.includes('type=invite') || hashStr.includes('type=recovery') || hashStr.includes('access_token=')) {
+            return;
+          }
+          if (window.location.search.includes('force=1') || window.location.search.includes('logout=1') || window.location.search.includes('mode=activate')) {
             for (const k of Object.keys(localStorage)) {
               if (k.startsWith('sb-') || k.includes('kharisma')) localStorage.removeItem(k);
             }
@@ -88,7 +92,7 @@
 
           <button class="module-button primary" id="btnLoginSubmit" type="submit">Masuk ke Akun</button>
           <button class="auth-forgot" type="button" id="btnToggleForgot">Lupa kata sandi?</button>
-          <small class="auth-hint">Default Admin: <strong>kurniaptk@gmail.com</strong></small>
+          <small class="auth-hint" style="cursor: default; opacity: 0.75;">Hubungi Administrator SDM jika Anda belum memiliki akun.</small>
         </form>
 
         <form class="auth-card" id="forgotForm" hidden>
@@ -106,23 +110,103 @@
           <button class="module-button primary" id="btnForgotSubmit" type="submit">Kirim Tautan Reset</button>
           <button class="auth-forgot" type="button" id="btnBackToLogin">Kembali ke halaman Masuk</button>
         </form>
+
+        <form class="auth-card" id="setPasswordForm" hidden>
+          <div class="auth-brand" id="setPasswordBrand">Aktivasi &amp; Keamanan Akun</div>
+          <h1 id="setPasswordTitle">Buat Kata Sandi Baru</h1>
+          <p id="setPasswordDesc">Silakan tetapkan kata sandi baru untuk mengaktifkan akun KharismaHub Anda.</p>
+
+          <label>
+            Kata Sandi Baru
+            <input name="newPassword" id="newPasswordInput" type="password" autocomplete="new-password" required minlength="6" placeholder="Minimal 6 karakter" />
+          </label>
+
+          <label>
+            Konfirmasi Kata Sandi Baru
+            <input name="confirmPassword" id="confirmPasswordInput" type="password" autocomplete="new-password" required minlength="6" placeholder="Ulangi kata sandi baru" />
+          </label>
+
+          <p class="auth-error" id="setPasswordMsg" role="alert" aria-live="polite"></p>
+
+          <button class="module-button primary" id="btnSetPasswordSubmit" type="submit">Simpan &amp; Aktifkan Akun</button>
+          <button class="auth-forgot" type="button" id="btnCancelSetPassword">Kembali ke halaman Masuk</button>
+        </form>
       </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" charset="UTF-8"></script>
-    <script src="./supabaseClient.js?v=20261022_1700" charset="UTF-8"></script>
+    <script src="./supabaseClient.js?v=20261022_1830" charset="UTF-8"></script>
     <script>
       document.addEventListener('DOMContentLoaded', () => {
         const loginForm = document.getElementById('loginForm');
         const forgotForm = document.getElementById('forgotForm');
+        const setPasswordForm = document.getElementById('setPasswordForm');
         const loginError = document.getElementById('loginError');
         const forgotMsg = document.getElementById('forgotMsg');
+        const setPasswordMsg = document.getElementById('setPasswordMsg');
         const btnSubmit = document.getElementById('btnLoginSubmit');
         const btnToggleForgot = document.getElementById('btnToggleForgot');
         const btnBackToLogin = document.getElementById('btnBackToLogin');
+        const btnCancelSetPassword = document.getElementById('btnCancelSetPassword');
+
+        async function activateAccountIfNeeded(accessToken) {
+          if (!accessToken) return null;
+          try {
+            const res = await fetch('/api/activate', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${accessToken}`
+              }
+            });
+            const payload = await res.json().catch(() => ({}));
+            return payload?.data || null;
+          } catch (e) {
+            console.warn('[Activate] Gagal memanggil /api/activate:', e);
+            return null;
+          }
+        }
+
+        function showSetPasswordView(mode = 'invite') {
+          loginForm.hidden = true;
+          forgotForm.hidden = true;
+          setPasswordForm.hidden = false;
+          setPasswordMsg.textContent = '';
+          const titleEl = document.getElementById('setPasswordTitle');
+          const descEl = document.getElementById('setPasswordDesc');
+          const brandEl = document.getElementById('setPasswordBrand');
+          if (mode === 'recovery') {
+            if (brandEl) brandEl.textContent = 'Pemulihan Kata Sandi';
+            if (titleEl) titleEl.textContent = 'Atur Kata Sandi Baru';
+            if (descEl) descEl.textContent = 'Masukkan kata sandi baru untuk mengamankan kembali akun kerja Anda.';
+          } else {
+            if (brandEl) brandEl.textContent = 'Aktivasi Undangan Akun';
+            if (titleEl) titleEl.textContent = 'Selamat Datang di KharismaHub';
+            if (descEl) descEl.textContent = 'Buat kata sandi baru untuk mengaktifkan akun kerja Anda.';
+          }
+        }
+
+        // Deteksi hash URL dari link email Supabase (#access_token=...&type=invite|recovery)
+        const initialHash = String(window.location.hash || '');
+        if (initialHash.includes('type=invite')) {
+          showSetPasswordView('invite');
+        } else if (initialHash.includes('type=recovery')) {
+          showSetPasswordView('recovery');
+        }
+
+        // Listener perubahan state auth Supabase untuk menangkap event PASSWORD_RECOVERY atau SIGNED_IN dari link
+        const sbClient = window.KharismaDB?.getClient?.();
+        if (sbClient?.auth?.onAuthStateChange) {
+          sbClient.auth.onAuthStateChange((event) => {
+            if (event === 'PASSWORD_RECOVERY') {
+              showSetPasswordView('recovery');
+            }
+          });
+        }
 
         btnToggleForgot?.addEventListener('click', () => {
           loginForm.hidden = true;
+          setPasswordForm.hidden = true;
           forgotForm.hidden = false;
           forgotMsg.textContent = '';
           loginError.textContent = '';
@@ -130,14 +214,92 @@
 
         btnBackToLogin?.addEventListener('click', () => {
           forgotForm.hidden = true;
+          setPasswordForm.hidden = true;
           loginForm.hidden = false;
           forgotMsg.textContent = '';
           loginError.textContent = '';
         });
 
-        document.querySelector('.auth-hint')?.addEventListener('click', () => {
-          document.getElementById('loginEmail').value = 'kurniaptk@gmail.com';
-          document.getElementById('loginPassword').value = 'kharisma132';
+        btnCancelSetPassword?.addEventListener('click', () => {
+          setPasswordForm.hidden = true;
+          forgotForm.hidden = true;
+          loginForm.hidden = false;
+          setPasswordMsg.textContent = '';
+          if (window.location.hash) {
+            history.replaceState(null, document.title, window.location.pathname + window.location.search);
+          }
+        });
+
+        setPasswordForm?.addEventListener('submit', async (e) => {
+          e.preventDefault();
+          setPasswordMsg.textContent = '';
+          setPasswordMsg.classList.remove('success');
+
+          const newPass = document.getElementById('newPasswordInput').value;
+          const confirmPass = document.getElementById('confirmPasswordInput').value;
+
+          if (!newPass || newPass.length < 6) {
+            setPasswordMsg.textContent = 'Kata sandi baru minimal harus 6 karakter.';
+            return;
+          }
+          if (newPass !== confirmPass) {
+            setPasswordMsg.textContent = 'Konfirmasi kata sandi tidak cocok.';
+            return;
+          }
+
+          const btnSet = document.getElementById('btnSetPasswordSubmit');
+          btnSet.disabled = true;
+          btnSet.textContent = 'Menyimpan & Mengaktifkan...';
+
+          try {
+            const client = window.KharismaDB?.getClient?.();
+            if (!client) throw new Error('Klien autentikasi belum siap. Muat ulang halaman.');
+
+            const { data: updateData, error: updateErr } = await client.auth.updateUser({ password: newPass });
+            if (updateErr) throw updateErr;
+
+            const { data: sessionData } = await client.auth.getSession();
+            const accessToken = sessionData?.session?.access_token;
+            const userId = updateData?.user?.id || sessionData?.session?.user?.id;
+            const userEmail = updateData?.user?.email || sessionData?.session?.user?.email || '';
+
+            const activatedProfile = await activateAccountIfNeeded(accessToken);
+
+            try {
+              localStorage.setItem('kharisma_auth_active', '1');
+              sessionStorage.setItem('kharisma_auth_active', '1');
+            } catch {}
+
+            let profile = activatedProfile;
+            if (!profile && userId && window.KharismaDB?.auth?.getProfile) {
+              const resProf = await window.KharismaDB.auth.getProfile(userId);
+              profile = resProf?.profile || null;
+            }
+            if (profile) {
+              const userObj = {
+                id: profile.id,
+                name: profile.full_name || profile.name || userEmail,
+                email: profile.email || userEmail,
+                role: profile.role || 'Employee',
+                department: profile.department || 'Human Resources',
+                title: profile.title || 'Karyawan',
+                employeeId: profile.employee_id || null,
+                status: 'Active'
+              };
+              localStorage.setItem('teamhub.userProfile', JSON.stringify(userObj));
+            }
+
+            setPasswordMsg.classList.add('success');
+            setPasswordMsg.textContent = 'Kata sandi tersimpan & akun aktif! Mengalihkan...';
+            setTimeout(() => {
+              window.location.replace('index.html');
+            }, 600);
+          } catch (err) {
+            console.error('[SetPassword Error]', err);
+            setPasswordMsg.textContent = err.message || 'Gagal menyimpan kata sandi baru. Tautan mungkin sudah kedaluwarsa.';
+            btnSet.disabled = false;
+            btnSet.textContent = 'Simpan & Aktifkan Akun';
+          }
         });
 
         loginForm?.addEventListener('submit', async (e) => {
@@ -176,21 +338,35 @@
               sessionStorage.setItem('kharisma_auth_active', '1');
             } catch {}
 
-            // Ambil profil pengguna
+            // Ambil profil pengguna & aktifkan jika status masih Pending
             try {
-              const { profile } = await window.KharismaDB.auth.getProfile(data.user.id);
+              let { profile } = await window.KharismaDB.auth.getProfile(data.user.id);
+              if (profile && profile.status === 'Pending' && data.session?.access_token) {
+                const activated = await activateAccountIfNeeded(data.session.access_token);
+                if (activated) profile = activated;
+              }
               if (profile) {
+                if (profile.status === 'Inactive') {
+                  await window.KharismaDB.auth.signOut();
+                  localStorage.removeItem('kharisma_auth_active');
+                  sessionStorage.removeItem('kharisma_auth_active');
+                  throw new Error('Akun Anda telah dinonaktifkan. Hubungi Administrator SDM.');
+                }
                 const userObj = {
                   id: profile.id,
                   name: profile.full_name || profile.name || email,
                   email: profile.email || email,
                   role: profile.role || 'Admin',
                   department: profile.department || 'Human Resources',
-                  title: profile.title || 'Administrator SDM'
+                  title: profile.title || 'Administrator SDM',
+                  employeeId: profile.employee_id || null,
+                  status: profile.status || 'Active'
                 };
                 localStorage.setItem('teamhub.userProfile', JSON.stringify(userObj));
               }
-            } catch {}
+            } catch (profErr) {
+              if (profErr.message && profErr.message.includes('dinonaktifkan')) throw profErr;
+            }
 
             btnSubmit.textContent = 'Berhasil! Mengalihkan...';
             window.location.replace('index.html');

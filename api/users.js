@@ -25,11 +25,12 @@ async function lastActiveAdminWouldBeRemoved(id, nextRole, nextStatus) {
 export default async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(204).end();
-  const auth = await requireUser(req);
+  const isMeQuery = req.method === 'GET' && (req.query?.me === 'true' || req.query?.me === '1');
+  const auth = await requireUser(req, { allowPending: isMeQuery });
   if (auth.error) return reject(res, auth);
 
   // Endpoint mandiri untuk pengguna memuat profilnya sendiri secara aman (bypass RLS recursion)
-  if (req.method === 'GET' && (req.query?.me === 'true' || req.query?.me === '1')) {
+  if (isMeQuery) {
     return res.status(200).json({ data: auth.profile });
   }
 
@@ -45,8 +46,9 @@ export default async function handler(req, res) {
     if (body.action === 'resend_invite') {
       const targetEmail = normalizeEmail(body.email);
       if (!validEmail(targetEmail)) return res.status(400).json({ error: 'Alamat email tidak valid.' });
-      const appUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kharismahub.vercel.app');
-      const resend = await supabaseAdmin(`/auth/v1/invite?redirect_to=${encodeURIComponent(appUrl)}`, {
+      const baseUrl = (process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kharismahub.vercel.app')).replace(/\/$/, '');
+      const redirectUrl = `${baseUrl}/login.html`;
+      const resend = await supabaseAdmin(`/auth/v1/invite?redirect_to=${encodeURIComponent(redirectUrl)}`, {
         method: 'POST',
         body: JSON.stringify({ email: targetEmail })
       });
@@ -57,8 +59,9 @@ export default async function handler(req, res) {
     if (body.action === 'reset_password') {
       const targetEmail = normalizeEmail(body.email);
       if (!validEmail(targetEmail)) return res.status(400).json({ error: 'Alamat email tidak valid.' });
-      const appUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kharismahub.vercel.app');
-      const reset = await supabaseAdmin(`/auth/v1/recover?redirect_to=${encodeURIComponent(appUrl)}`, {
+      const baseUrl = (process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kharismahub.vercel.app')).replace(/\/$/, '');
+      const redirectUrl = `${baseUrl}/login.html`;
+      const reset = await supabaseAdmin(`/auth/v1/recover?redirect_to=${encodeURIComponent(redirectUrl)}`, {
         method: 'POST',
         body: JSON.stringify({ email: targetEmail })
       });
@@ -77,10 +80,28 @@ export default async function handler(req, res) {
 
     const match = await getEmployeeByEmail(email);
     if (match.error) return res.status(match.status || 502).json({ error: match.error });
-    if (role === 'Employee' && !match.employee) return res.status(409).json({ error: 'Email harus cocok dengan data karyawan yang sudah terdaftar.' });
-    const employee = match.employee;
-    const appUrl = process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kharismahub.vercel.app');
-    const invite = await supabaseAdmin(`/auth/v1/invite?redirect_to=${encodeURIComponent(appUrl)}`, {
+    let employee = match.employee;
+    if (role === 'Employee' && !employee) {
+      const autoEmp = {
+        id: `EMP-${Date.now().toString().slice(-4)}`,
+        name,
+        email,
+        department: department || 'Operations',
+        title: title || 'Karyawan',
+        status: 'On-Time',
+        employment_type: 'Full-Time',
+        work_model: 'On-Site'
+      };
+      const empSaved = await supabaseAdmin('/rest/v1/employees?on_conflict=id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify(autoEmp)
+      });
+      employee = empSaved.ok && empSaved.data?.[0] ? empSaved.data[0] : autoEmp;
+    }
+    const baseUrl = (process.env.APP_URL || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'https://kharismahub.vercel.app')).replace(/\/$/, '');
+    const redirectUrl = `${baseUrl}/login.html`;
+    const invite = await supabaseAdmin(`/auth/v1/invite?redirect_to=${encodeURIComponent(redirectUrl)}`, {
       method: 'POST',
       body: JSON.stringify({ email, data: { full_name: name } })
     });
@@ -138,20 +159,35 @@ export default async function handler(req, res) {
     if (nextRole === 'Supervisor' && !String(body.department ?? current.department ?? '').trim()) return res.status(400).json({ error: 'Pilih departemen untuk akun atasan.' });
     if (nextRole === 'Employee') {
       let employeeId = body.employee_id ?? current.employee_id;
+      const targetEmail = normalizeEmail(body.email ?? current.email);
       if (!employeeId) {
-        const match = await getEmployeeByEmail(normalizeEmail(body.email ?? current.email));
+        const match = await getEmployeeByEmail(targetEmail);
         if (match.error) return res.status(match.status || 502).json({ error: match.error });
         employeeId = match.employee?.id;
       }
-      if (!employeeId) return res.status(409).json({ error: 'Akun karyawan harus ditautkan ke data karyawan dengan email yang sama.' });
-      const employee = await supabaseAdmin(`/rest/v1/employees?id=eq.${encodeURIComponent(employeeId)}&select=id,email,department,title`);
-      if (!employee.ok || !employee.data?.[0] || normalizeEmail(employee.data[0].email) !== normalizeEmail(body.email ?? current.email)) {
-        return res.status(409).json({ error: 'Tautan akun harus mengarah ke data karyawan dengan email yang sama.' });
+      if (!employeeId) {
+        const autoEmp = {
+          id: `EMP-${Date.now().toString().slice(-4)}`,
+          name: fields.full_name || targetEmail.split('@')[0] || 'Karyawan',
+          email: targetEmail,
+          department: fields.department || current.department || 'Operations',
+          title: fields.title || 'Karyawan',
+          status: 'On-Time',
+          employment_type: 'Full-Time',
+          work_model: 'On-Site'
+        };
+        const empSaved = await supabaseAdmin('/rest/v1/employees?on_conflict=id', {
+          method: 'POST',
+          headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+          body: JSON.stringify(autoEmp)
+        });
+        employeeId = empSaved.ok && empSaved.data?.[0] ? empSaved.data[0].id : autoEmp.id;
       }
+      const employee = await supabaseAdmin(`/rest/v1/employees?id=eq.${encodeURIComponent(employeeId)}&select=id,email,department,title`);
       fields.employee_id = employeeId;
-      if (nextRole === 'Employee') {
-        fields.department = employee.data[0].department;
-        fields.title = employee.data[0].title;
+      if (employee.ok && employee.data?.[0]) {
+        if (!fields.department) fields.department = employee.data[0].department;
+        if (!fields.title) fields.title = employee.data[0].title;
       }
     }
     if (await lastActiveAdminWouldBeRemoved(id, nextRole, nextStatus)) return res.status(409).json({ error: 'Sistem harus memiliki setidaknya satu administrator aktif.' });

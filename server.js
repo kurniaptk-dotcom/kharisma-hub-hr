@@ -52,9 +52,9 @@ const initialData = {
   ],
   attendance: [],
   leaveRequests: [
-    { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2035', period: '20–22 Jun 2035', duration: '3 Days', reason: 'Doctor’s note attached', status: 'Approved' },
-    { id: 'lv-2', name: 'Jacob Yuen', title: 'Site Supervisor', type: 'Annual Leave', submitDate: '10 Jun 2035', period: '17–21 Jun 2035', duration: '5 Days', reason: 'Family trip', status: 'Approved' },
-    { id: 'lv-3', name: 'Anya Rodriguez', title: 'Graphic Designer', type: 'Other Leave', submitDate: '17 Jun 2035', period: '19 Jun 2035', duration: '1 Day', reason: 'Personal matter', status: 'Pending' }
+    { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2026', period: '20–22 Jun 2026', duration: '3 Days', reason: 'Doctor’s note attached', status: 'Approved' },
+    { id: 'lv-2', name: 'Jacob Yuen', title: 'Site Supervisor', type: 'Annual Leave', submitDate: '10 Jun 2026', period: '17–21 Jun 2026', duration: '5 Days', reason: 'Family trip', status: 'Approved' },
+    { id: 'lv-3', name: 'Anya Rodriguez', title: 'Graphic Designer', type: 'Other Leave', submitDate: '17 Jun 2026', period: '19 Jun 2026', duration: '1 Day', reason: 'Personal matter', status: 'Pending' }
   ],
   kpis: [
     { id: 'kpi-1', title: 'Customer Satisfaction Score (CSAT)', dept: 'Customer Service', pic: 'Olivia Mason', target: 90, actual: 95.2, unit: '%', weight: 25, status: 'Exceeded' },
@@ -489,7 +489,7 @@ const server = http.createServer(async (req, res) => {
         const newEv = {
           id: body.id || `cal-${Date.now().toString().slice(-4)}`,
           day: Number(body.day || 1),
-          date: body.date || '2035-06-01',
+          date: body.date || '2026-06-01',
           title: body.title || 'Agenda Baru',
           time: body.time || '09:00 - 10:00 WIB',
           location: body.location || 'Kantor Utama',

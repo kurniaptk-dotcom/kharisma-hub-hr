@@ -56,7 +56,7 @@
     'New calendar event': 'Acara kalender baru', 'Request time off': 'Ajukan cuti', 'Create item': 'Buat item',
     'e.g. Taylor Johnson': 'mis. Taylor Johnson', 'name@kharismahub.com': 'nama@kharismahub.com', 'nama@kharismahub.com': 'nama@kharismahub.com', 'e.g. Product Designer': 'mis. Desainer Produk',
     'e.g. Team planning': 'mis. Rapat tim', 'Meeting room or video link': 'Ruang rapat atau tautan video', 'Full name': 'Nama lengkap',
-    'Open role': 'Posisi yang tersedia', 'e.g. Q3 2035 review': 'mis. Penilaian Triwulan 3 2035', 'Performance review': 'Penilaian kinerja',
+    'Open role': 'Posisi yang tersedia', 'e.g. Q3 2026 review': 'mis. Penilaian Triwulan 3 2026', 'Performance review': 'Penilaian kinerja',
     'Probation review': 'Penilaian masa percobaan', 'Peer feedback': 'Umpan balik rekan kerja', 'TEAMHUB WORKSPACE': 'RUANG KERJA KHARISMA HUB', 'KHARISMA HUB WORKSPACE': 'RUANG KERJA KHARISMA HUB',
     'Hello Davis!': 'Halo, Davis!', 'Good Morning': 'Selamat Pagi', "You're part of a": 'Anda adalah bagian dari', "You've submitted": 'Anda telah mengajukan',
     'growing team!': 'tim yang terus berkembang!', 'Your attendance this month is looking': 'Kehadiran Anda bulan ini terlihat', 'solid': 'baik',
@@ -110,7 +110,7 @@
     'Performance Review Check-in — Marketing Team': 'Tinjauan Kinerja — Tim Pemasaran', 'Online Test Review': 'Tinjauan Tes Daring',
     'Leave Request Approval': 'Persetujuan Permintaan Cuti', 'Updated Contact Info': 'Pembaruan Informasi Kontak',
     "I've attached my doctor's note for the requested medical leave from June 20 to June 21.": 'Saya melampirkan surat dokter untuk pengajuan cuti sakit pada 20–21 Juni.',
-    'Please review the newly updated 2035 leave policy document. It includes important updates on...': 'Silakan tinjau dokumen kebijakan cuti 2035 yang telah diperbarui. Dokumen ini memuat perubahan penting mengenai cuti.',
+    'Please review the newly updated 2026 leave policy document. It includes important updates on...': 'Silakan tinjau dokumen kebijakan cuti 2026 yang telah diperbarui. Dokumen ini memuat perubahan penting mengenai cuti.',
     'Just a quick heads-up that I\'ve updated my emergency contact details on my profile.': 'Saya ingin memberi tahu bahwa informasi kontak darurat di profil saya sudah diperbarui.',
     'Hi, I\'d like to follow up on my annual leave request for next month, from July 15 to July 19.': 'Halo, saya ingin menindaklanjuti permintaan cuti tahunan untuk bulan depan, tanggal 15 sampai 19 Juli.',
     'I\'d like to follow up on my annual leave request for the dates 15–19 July.': 'Saya ingin menindaklanjuti permintaan cuti tahunan untuk tanggal 15–19 Juli.',
@@ -165,19 +165,33 @@
 
   const entries = Object.entries(translations).sort(([a], [b]) => b.length - a.length);
   const escapePattern = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const compiledForward = entries.map(([source, target]) => ({
+    source,
+    target,
+    regex: new RegExp(`(^|[^\\p{L}\\p{N}])${escapePattern(source)}(?=$|[^\\p{L}\\p{N}])`, 'gu')
+  }));
+  const compiledReverse = entries.map(([source, target]) => ({
+    source,
+    target,
+    regex: new RegExp(`(^|[^\\p{L}\\p{N}])${escapePattern(target)}(?=$|[^\\p{L}\\p{N}])`, 'giu')
+  }));
+
   function translate(value) {
+    if (!value || !/[A-Za-z]/.test(value)) return value;
     let result = value;
-    for (const [source, target] of entries) {
-      const expression = new RegExp(`(^|[^\\p{L}\\p{N}])${escapePattern(source)}(?=$|[^\\p{L}\\p{N}])`, 'gu');
-      result = result.replace(expression, (match, prefix) => `${prefix}${target}`);
+    for (let i = 0; i < compiledForward.length; i++) {
+      const item = compiledForward[i];
+      if (!result.includes(item.source)) continue;
+      result = result.replace(item.regex, (match, prefix) => `${prefix}${item.target}`);
     }
     return result;
   }
   function toEnglish(value) {
+    if (!value) return value;
     let result = value;
-    for (const [source, target] of entries) {
-      const expression = new RegExp(`(^|[^\\p{L}\\p{N}])${escapePattern(target)}(?=$|[^\\p{L}\\p{N}])`, 'giu');
-      result = result.replace(expression, (match, prefix) => `${prefix}${source}`);
+    for (let i = 0; i < compiledReverse.length; i++) {
+      const item = compiledReverse[i];
+      result = result.replace(item.regex, (match, prefix) => `${prefix}${item.source}`);
     }
     return result;
   }

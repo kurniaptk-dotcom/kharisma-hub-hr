@@ -164,10 +164,15 @@ begin
   v_distance := 6371000 * 2 * asin(least(1,sqrt(
     power(sin(radians(p_latitude-v_location.latitude)/2),2) + cos(radians(v_location.latitude))*cos(radians(p_latitude))*power(sin(radians(p_longitude-v_location.longitude)/2),2)
   )));
-  if v_distance > v_location.radius_m then raise exception 'Anda berada di luar radius lokasi kantor (% meter).', v_location.radius_m; end if;
+  if lower(coalesce(v_work_model, 'on-site')) <> 'remote' and v_distance > v_location.radius_m then
+    raise exception 'Anda berada di luar radius lokasi kantor (% meter).', v_location.radius_m;
+  end if;
   select s.* into v_shift from public.attendance_shift_assignments a join public.attendance_shifts s on s.id=a.shift_id
     where a.employee_id=v_employee_id and s.enabled=true;
-  if not found then raise exception 'Atasan belum menetapkan shift kerja untuk akun Anda.'; end if;
+  if not found then
+    select * into v_shift from public.attendance_shifts where enabled=true order by created_at asc limit 1;
+  end if;
+  if v_shift.id is null then raise exception 'Atasan belum menetapkan shift kerja untuk akun Anda.'; end if;
   if not (extract(isodow from p_date)::integer = any(v_shift.weekdays)) then raise exception 'Hari ini tidak termasuk jadwal kerja shift Anda.'; end if;
 
   select * into v_record from public.attendance_records where auth_user_id=auth.uid() and date=p_date for update;

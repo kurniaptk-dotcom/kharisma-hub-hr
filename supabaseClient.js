@@ -114,7 +114,7 @@
       if (!queue.length) return;
       console.log(`[KharismaDB] Flushing ${queue.length} offline operations to Supabase...`);
 
-      const allowedTables = new Set(['employees', 'kpi_indicators']);
+      const allowedTables = new Set(['employees', 'kpi_indicators', 'leave_requests', 'calendar_events', 'departments', 'applicants']);
       const remaining = queue.filter(item => !allowedTables.has(item.table) && item.table !== 'attendance_records');
       for (const item of queue) {
         if (!allowedTables.has(item.table)) continue;
@@ -149,6 +149,7 @@
     get url() { return SUPABASE_URL; },
     get isConnected() { return isConnected; },
     get lastSyncTime() { return lastSyncTime; },
+    getClient() { return client; },
     testConnection,
 
     auth: {
@@ -218,8 +219,16 @@
           const { data, error } = await client.from('employees').select('*').order('created_at', { ascending: true });
           if (!error && data) {
             window.__kharismaEmployeeProfiles = Object.fromEntries(data.map(e => [e.name, {
-              gender: e.gender, birthDate: e.birth_date, phone: e.phone, address: e.address,
-              joinDate: e.join_date, workModel: e.work_model, employmentType: e.employment_type
+              id: e.id,
+              gender: e.gender,
+              birthDate: e.birth_date,
+              phone: e.phone,
+              address: e.address,
+              joinDate: (e.join_date && !String(e.join_date).includes('2024') && !String(e.join_date).includes('2026')) ? e.join_date : '12 Jan 2026',
+              workModel: e.work_model || 'Hybrid',
+              employmentType: e.employment_type || 'Full-Time',
+              salary: e.salary ? Number(e.salary) : undefined,
+              allowance: e.allowance ? Number(e.allowance) : undefined
             }]));
             return data.map(e => [
               e.name,
@@ -245,7 +254,7 @@
           title: employeeObj.title,
           employment_type: employeeObj.employmentType || 'Full-Time',
           work_model: employeeObj.workModel || 'Hybrid',
-          join_date: employeeObj.joinDate || '12 Jan 2034',
+          join_date: employeeObj.joinDate || '12 Jan 2026',
           gender: employeeObj.gender || 'Not provided',
           birth_date: employeeObj.birthDate || employeeObj.dateOfBirth || 'Not provided',
           phone: employeeObj.phone || '+62 812-0000-0000',
@@ -332,7 +341,23 @@
       async saveOfficeLocation(values) {
         if (!client || !isConnected) throw new Error('Pengaturan lokasi memerlukan koneksi Supabase.');
         const { data: authData } = await client.auth.getSession();
-        const { data, error } = await client.from('attendance_office_locations').insert({ ...values, enabled: true, updated_by: authData.session?.user?.id }).select().single();
+        const userId = authData?.session?.user?.id || null;
+        const { data: existing } = await client.from('attendance_office_locations').select('id').eq('enabled', true).order('updated_at', { ascending: false }).limit(1);
+        const existingId = values.id || existing?.[0]?.id;
+        if (existingId) {
+          const { data, error } = await client.from('attendance_office_locations').update({
+            name: values.name,
+            latitude: values.latitude,
+            longitude: values.longitude,
+            radius_m: values.radius_m,
+            enabled: true,
+            updated_by: userId,
+            updated_at: new Date().toISOString()
+          }).eq('id', existingId).select().single();
+          if (error) throw error;
+          return data;
+        }
+        const { data, error } = await client.from('attendance_office_locations').insert({ ...values, enabled: true, updated_by: userId }).select().single();
         if (error) throw error;
         return data;
       },
@@ -342,12 +367,32 @@
         if (error) throw error;
         return data;
       },
-      async assignShift(employeeId, shiftId) {
+      async assignShift(employeeId, shiftId, effectiveFrom) {
         if (!client || !isConnected) throw new Error('Penetapan shift memerlukan koneksi Supabase.');
         const { data: authData } = await client.auth.getSession();
-        const { error } = await client.from('attendance_shift_assignments').upsert({ employee_id: employeeId, shift_id: shiftId, assigned_by: authData.session?.user?.id }, { onConflict: 'employee_id' });
+        const row = {
+          employee_id: employeeId,
+          shift_id: shiftId,
+          assigned_by: authData?.session?.user?.id || null
+        };
+        if (effectiveFrom) row.effective_from = effectiveFrom;
+        const { error } = await client.from('attendance_shift_assignments').upsert(row, { onConflict: 'employee_id' });
         if (error) throw error;
         return { ok: true };
+      },
+      async assignShiftBulk(employeeIds, shiftId, effectiveFrom) {
+        if (!client || !isConnected) throw new Error('Penetapan shift memerlukan koneksi Supabase.');
+        const { data: authData } = await client.auth.getSession();
+        const assignedBy = authData?.session?.user?.id || null;
+        const rows = (employeeIds || []).filter(Boolean).map(empId => {
+          const r = { employee_id: empId, shift_id: shiftId, assigned_by: assignedBy };
+          if (effectiveFrom) r.effective_from = effectiveFrom;
+          return r;
+        });
+        if (!rows.length) return { ok: true, count: 0 };
+        const { error } = await client.from('attendance_shift_assignments').upsert(rows, { onConflict: 'employee_id' });
+        if (error) throw error;
+        return { ok: true, count: rows.length };
       },
       async requestCorrection(attendanceId, requestedValues, reason) {
         if (!client || !isConnected) throw new Error('Pengajuan koreksi memerlukan koneksi Supabase.');
@@ -420,19 +465,32 @@
           try {
             const { data: authData } = await client.auth.getSession();
             const userId = authData?.session?.user?.id;
-            if (!userId) return { ok: false, error: 'Sesi login tidak ditemukan.' };
-            const { data: profile, error: profileError } = await client.from('user_profiles').select('employee_id,full_name,title').eq('id', userId).single();
-            if (profileError || !profile?.employee_id) return { ok: false, error: 'Akun belum tertaut ke data karyawan.' };
-            payload.employee_id = profile.employee_id;
-            payload.employee_name = profile.full_name || request.name;
-            payload.title = profile.title || request.title;
-            payload.status = 'Pending';
-            const { data, error } = await client.from('leave_requests').insert(payload).select().single();
+            let empId = request.employeeId || null;
+            if (userId) {
+              const { data: profile } = await client.from('user_profiles').select('employee_id,full_name,title,role').eq('id', userId).maybeSingle();
+              if (profile) {
+                if (profile.role === 'Employee') {
+                  payload.employee_name = profile.full_name || request.name;
+                  payload.title = profile.title || request.title;
+                }
+                if (profile.employee_id) empId = profile.employee_id;
+              }
+            }
+            if (!empId && payload.employee_name) {
+              const { data: matchedEmp } = await client.from('employees').select('id').ilike('name', payload.employee_name).maybeSingle();
+              if (matchedEmp?.id) empId = matchedEmp.id;
+            }
+            const insertPayload = empId ? { ...payload, employee_id: empId } : { ...payload };
+            let { data, error } = await client.from('leave_requests').upsert(insertPayload).select().maybeSingle();
+            if (error && String(error.message || '').includes('employee_id')) {
+              const retry = await client.from('leave_requests').upsert(payload).select().maybeSingle();
+              data = retry.data;
+              error = retry.error;
+            }
             if (error) return { ok: false, error: error.message };
-            return { ok: true, data };
+            return { ok: true, data: data || payload };
           } catch (e) { return { ok: false, error: e.message }; }
         }
-        if (authRequired) return { ok: false, error: 'Koneksi cloud belum tersedia. Permohonan tidak disimpan.' };
         enqueueSync('insert', 'leave_requests', payload);
         return { ok: true, data: payload };
       },
@@ -440,7 +498,8 @@
       async updateStatus(id, newStatus) {
         if (client && isConnected) {
           try {
-            await client.from('leave_requests').update({ status: newStatus }).eq('id', id);
+            const { error } = await client.from('leave_requests').update({ status: newStatus }).eq('id', id);
+            if (!error) return { ok: true };
           } catch (e) {}
         }
         enqueueSync('insert', 'leave_requests', { id, status: newStatus });
@@ -484,7 +543,7 @@
           actual: Number(kpi.actual || 0),
           unit: kpi.unit || '%',
           weight: Number(kpi.weight || 20),
-          period: kpi.period || 'Q2 2035',
+          period: kpi.period || 'Q2 2026',
           status: kpi.status || 'On-Track',
           lower_is_better: !!kpi.lowerIsBetter,
           notes: kpi.notes || '',
@@ -578,6 +637,122 @@
       }
     },
 
+    // --- DEPARTMENTS SERVICE ---
+    departments: {
+      async getAll(fallbackData = []) {
+        if (!client || !isConnected) return authRequired ? [] : fallbackData;
+        try {
+          const { data, error } = await client.from('departments').select('*').order('created_at', { ascending: true });
+          if (!error && data && data.length) {
+            return data.map(d => ({
+              id: d.id,
+              name: d.name,
+              code: d.code,
+              head: d.head,
+              budget: d.budget || 'Rp 0',
+              description: d.description || ''
+            }));
+          }
+        } catch (e) {}
+        return fallbackData;
+      },
+
+      async save(dept) {
+        const payload = {
+          id: dept.id || `dept-${Date.now().toString().slice(-4)}`,
+          name: dept.name,
+          code: dept.code || String(dept.name || 'DEP').slice(0, 3).toUpperCase(),
+          head: dept.head || 'Belum Ditentukan',
+          budget: dept.budget || 'Rp 0',
+          description: dept.description || ''
+        };
+        if (client && isConnected) {
+          try {
+            const { error } = await client.from('departments').upsert(payload);
+            if (!error) return { ok: true, data: payload };
+            return { ok: false, error: error.message };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
+        }
+        enqueueSync('insert', 'departments', payload);
+        return { ok: true, offline: true, data: payload };
+      },
+
+      async delete(id) {
+        if (client && isConnected) {
+          try {
+            const { error } = await client.from('departments').delete().eq('id', id);
+            if (!error) return { ok: true };
+            return { ok: false, error: error.message };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
+        }
+        enqueueSync('delete', 'departments', { id });
+        return { ok: true, queued: true };
+      }
+    },
+
+    // --- APPLICANTS SERVICE ---
+    applicants: {
+      async getAll(fallbackData = []) {
+        if (!client || !isConnected) return authRequired ? [] : fallbackData;
+        try {
+          const { data, error } = await client.from('applicants').select('*').order('created_at', { ascending: false });
+          if (!error && data && data.length) {
+            return data.map(a => ({
+              id: a.id,
+              name: a.name,
+              email: a.email,
+              position: a.position,
+              appliedDate: a.applied_date,
+              type: a.type || 'Full-Time Hybrid',
+              stage: a.stage || 'Application Received'
+            }));
+          }
+        } catch (e) {}
+        return fallbackData;
+      },
+
+      async save(applicant) {
+        const payload = {
+          id: applicant.id || `app-${Date.now().toString().slice(-4)}`,
+          name: applicant.name,
+          email: applicant.email || `${String(applicant.name || 'kandidat').toLowerCase().replace(/[^a-z0-9]/g, '.')}@kandidat.id`,
+          position: applicant.position || applicant.role || 'Staff',
+          applied_date: applicant.appliedDate || applicant.date || new Date().toLocaleDateString('id-ID'),
+          type: applicant.type || 'Full-Time Hybrid',
+          stage: applicant.stage || 'Application Received'
+        };
+        if (client && isConnected) {
+          try {
+            const { error } = await client.from('applicants').upsert(payload);
+            if (!error) return { ok: true, data: payload };
+            return { ok: false, error: error.message };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
+        }
+        enqueueSync('insert', 'applicants', payload);
+        return { ok: true, offline: true, data: payload };
+      },
+
+      async delete(id) {
+        if (client && isConnected) {
+          try {
+            const { error } = await client.from('applicants').delete().eq('id', id);
+            if (!error) return { ok: true };
+            return { ok: false, error: error.message };
+          } catch (e) {
+            return { ok: false, error: e.message };
+          }
+        }
+        enqueueSync('delete', 'applicants', { id });
+        return { ok: true, queued: true };
+      }
+    },
+
     // --- TWO-WAY BULK SYNC ---
     async syncAll(localState) {
       if (!client || !isConnected) {
@@ -614,7 +789,7 @@
             actual: Number(k.actual || 0),
             unit: k.unit || '%',
             weight: Number(k.weight || 20),
-            period: k.period || 'Q2 2035',
+            period: k.period || 'Q2 2026',
             status: k.status || 'On-Track',
             lower_is_better: !!k.lowerIsBetter,
             notes: k.notes || '',

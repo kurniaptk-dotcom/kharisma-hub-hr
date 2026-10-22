@@ -1713,11 +1713,13 @@ function pageMarkup(key) {
   const attendanceRows = allAttendanceItems.map((item) => {
     const stNorm = item.status === 'Tepat Waktu' ? 'On-Time' : item.status === 'Terlambat' ? 'Late' : item.status === 'Cuti' ? 'On Leave' : item.status === 'Tidak Hadir' ? 'Absent' : item.status;
     const badgeClass = stNorm === 'On-Time' ? 'ontime' : stNorm === 'Late' ? 'late' : stNorm === 'Absent' ? 'absent' : stNorm === 'Belum Lengkap' ? 'incomplete' : 'leave';
+    const dotClass = stNorm === 'Absent' ? 'offline' : stNorm === 'On Leave' ? 'away' : 'online';
+    const lateIcon = stNorm === 'Late' ? `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:-1px;margin-right:4px"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>` : '';
     return `
     <tr class="${item.isUser ? 'user-attendance-row' : ''}" data-status="${safe(stNorm)}">
       <td>
         <button class="employee-link" data-action="view-employee" data-name="${safe(item.rawName)}">
-          ${avatar(item.rawName, `p${item.avatarIdx}`)}
+          <span class="att-avatar-wrap">${avatar(item.rawName, `p${item.avatarIdx}`)}<i class="att-online-dot ${dotClass}"></i></span>
           <span><strong>${safe(item.name)}</strong><small>${safe(item.id)}</small></span>
         </button>
       </td>
@@ -1727,7 +1729,8 @@ function pageMarkup(key) {
       <td>${safe(item.checkInOut)}</td>
       <td>${safe(item.duration)}</td>
       <td>${safe(item.overtime)}</td>
-      <td><span class="status ${badgeClass}">${safe(stNorm)}</span></td>
+      <td><span class="status ${badgeClass}">${lateIcon}${safe(stNorm)}</span></td>
+      <td class="att-action-cell"><button type="button" class="kebab att-row-kebab" data-action="view-employee" data-name="${safe(item.rawName)}" title="Lihat Detail ${safe(item.rawName)}">•••</button></td>
     </tr>
   `;
   }).join('');
@@ -2268,27 +2271,93 @@ function pageMarkup(key) {
 
     return `
       <section class="module-card attendance-self-service">
+        <div class="att-watermark-clock" aria-hidden="true">
+          <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M12 5V3"/></svg>
+        </div>
         <div class="attendance-live-bar">
           <div class="attendance-live-info">
             <div class="attendance-live-title">
-              <span class="live-pulse-dot ${activeRecordToday && userAttendanceRecord?.state === 'working' ? 'working' : activeRecordToday && userAttendanceRecord?.state === 'on_break' ? 'break' : ''}"></span>
+              <span class="live-pulse-dot ${activeRecordToday && userAttendanceRecord?.state === 'on_break' ? 'break' : 'working'}"></span>
               <strong>Presensi Mandiri (${safe(userProfile.name)})</strong>
-              <span class="status ${activeRecordToday ? 'ontime' : 'late'}">${safe(attendanceDisplayState())}</span>
+              <span class="att-self-badge">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14v2H5v-2z"/></svg>
+                ${safe(attendanceDisplayState())}
+              </span>
             </div>
             <div class="attendance-timeline">
-              <span>Shift: <b>${assignedShift ? `${safe(assignedShift.name)} (${String(assignedShift.start_time).slice(0,5)} - ${String(assignedShift.end_time).slice(0,5)})` : '09:00 - 17:00'}</b></span>
-              <span>Masuk: <b>${safe(userAttendanceRecord?.clockIn || '—')}</b></span>
-              ${(userAttendanceRecord?.breakSessions || []).length ? `<span>Istirahat: <b>${userAttendanceRecord.breakSessions.map(item => `${attendanceTimeLabel(item.start)}-${item.end ? attendanceTimeLabel(item.end) : 'aktif'}`).join(', ')}</b></span>` : ''}
-              <span>Pulang: <b>${safe(userAttendanceRecord?.clockOut || '—')}</b></span>
-              <span>Durasi: <b>${safe(userAttendanceRecord?.duration || '—')}</b></span>
-              <span>Lokasi: <b>${userAttendanceRecord?.location?.verified ? (userAttendanceRecord.location.remote ? 'Remote/Hybrid • Tercatat' : `Kantor • ${Math.round(userAttendanceRecord.location.distance || 0)}m`) : 'Siap diverifikasi'}</b></span>
+              <div class="att-meta-card">
+                <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><circle cx="16" cy="16" r="3"/></svg></i>
+                <div class="att-meta-copy">
+                  <small>Shift</small>
+                  <b>${assignedShift ? safe(assignedShift.name) : 'Shift Reguler'}</b>
+                  <em>${assignedShift ? `${String(assignedShift.start_time).slice(0,5)} – ${String(assignedShift.end_time).slice(0,5)}` : '09:00 – 17:00'}</em>
+                </div>
+              </div>
+              <div class="att-meta-card">
+                <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg></i>
+                <div class="att-meta-copy">
+                  <small>Masuk</small>
+                  <b>${safe(userAttendanceRecord?.clockIn || '—')}</b>
+                </div>
+              </div>
+              ${(userAttendanceRecord?.breakSessions || []).length ? `
+              <div class="att-meta-card">
+                <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8h1a4 4 0 0 1 0 8h-1"/><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"/></svg></i>
+                <div class="att-meta-copy">
+                  <small>Istirahat</small>
+                  <b>${userAttendanceRecord.breakSessions.map(item => `${attendanceTimeLabel(item.start)}-${item.end ? attendanceTimeLabel(item.end) : 'aktif'}`).join(', ')}</b>
+                </div>
+              </div>` : ''}
+              <div class="att-meta-card">
+                <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></i>
+                <div class="att-meta-copy">
+                  <small>Pulang</small>
+                  <b>${safe(userAttendanceRecord?.clockOut || '—')}</b>
+                </div>
+              </div>
+              <div class="att-meta-card">
+                <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></i>
+                <div class="att-meta-copy">
+                  <small>Durasi</small>
+                  <b>${safe(userAttendanceRecord?.duration || '—')}</b>
+                </div>
+              </div>
+              <div class="att-meta-card">
+                <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></i>
+                <div class="att-meta-copy">
+                  <small>Lokasi</small>
+                  <b>${userAttendanceRecord?.location?.verified ? (userAttendanceRecord.location.remote ? 'Remote/Hybrid • Tercatat' : `Kantor • ${Math.round(userAttendanceRecord.location.distance || 0)}m`) : 'Siap diverifikasi'}</b>
+                </div>
+              </div>
             </div>
           </div>
           <div class="attendance-live-actions">
-            ${transitionAction ? `<button class="module-button primary" data-action="attendance-transition" data-transition="${transitionAction}">${transitionLabel}</button>` : `<span class="status ontime">Presensi Hari Ini Selesai</span>`}
-            ${activeRecordToday && userAttendanceRecord.state === 'working' ? `<button class="module-button secondary" data-action="attendance-transition" data-transition="clock_out">Presensi Pulang</button>` : ''}
-            <button type="button" class="module-button secondary" data-action="toggle-att-correction" title="Ajukan Koreksi Jam Kerja">Ajukan Koreksi</button>
-            ${(isAdmin() || isSupervisor()) ? `<button type="button" class="module-button secondary" data-action="toggle-att-admin" title="Pengaturan Lokasi Kantor & Shift">Kebijakan &amp; Shift</button>` : ''}
+            <div class="att-cta-top-row">
+              <span class="att-cta-hint">${activeRecordToday && userAttendanceRecord?.state === 'working' ? 'Sedang bekerja aktif<br><strong>Jangan lupa absen pulang!</strong>' : activeRecordToday && userAttendanceRecord?.clockOut ? 'Terima kasih!<br><strong>Presensi hari ini lengkap</strong>' : 'Mulai hari dengan<br><strong>presensi terlebih dahulu!</strong>'}</span>
+              ${transitionAction ? `
+                <button class="att-main-cta-btn" data-action="attendance-transition" data-transition="${transitionAction}">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <span>${transitionLabel}</span>
+                </button>
+              ` : `<span class="att-main-cta-btn done">✓ Presensi Selesai</span>`}
+              ${activeRecordToday && userAttendanceRecord.state === 'working' ? `
+                <button class="att-main-cta-btn checkout" data-action="attendance-transition" data-transition="clock_out">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  <span>Presensi Pulang</span>
+                </button>
+              ` : ''}
+            </div>
+            <div class="att-cta-sub-row">
+              <button type="button" class="att-sub-btn" data-action="toggle-att-correction" title="Ajukan Koreksi Jam Kerja">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                <span>Ajukan Koreksi</span>
+              </button>
+              ${(isAdmin() || isSupervisor()) ? `
+              <button type="button" class="att-sub-btn" data-action="toggle-att-admin" title="Pengaturan Lokasi Kantor & Shift">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                <span>Kebijakan &amp; Shift</span>
+              </button>` : ''}
+            </div>
           </div>
         </div>
 
@@ -2362,8 +2431,8 @@ function pageMarkup(key) {
             </form>
           </div>
           ${(attendanceReviewQueue.corrections.length || attendanceReviewQueue.overtime.length) ? `
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0">
-            <h4 style="margin:0 0 8px;font-size:13px">Antrean Persetujuan Koreksi &amp; Lembur (${attendanceReviewQueue.corrections.length + attendanceReviewQueue.overtime.length})</h4>
+          <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.2)">
+            <h4 style="margin:0 0 8px;font-size:13px;color:#fff">Antrean Persetujuan Koreksi &amp; Lembur (${attendanceReviewQueue.corrections.length + attendanceReviewQueue.overtime.length})</h4>
             ${attendanceReviewQueue.corrections.map(request => `<article class="attendance-review-item"><span><strong>${safe(request.attendance_records?.employee_name || request.employeeName || 'Karyawan')}</strong><small>Koreksi: ${safe(request.requested_values?.clock_in || '-')} s/d ${safe(request.requested_values?.clock_out || '-')} • ${safe(request.reason)}</small></span><button type="button" class="module-button secondary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="rejected">Tolak</button><button type="button" class="module-button primary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="approved">Setujui</button></article>`).join('')}
             ${attendanceReviewQueue.overtime.map(record => `<article class="attendance-review-item"><span><strong>${safe(record.employee_name)} • ${safe(record.date)}</strong><small>Lembur ${safe(record.overtime)}</small></span><button type="button" class="module-button secondary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="false">Tolak</button><button type="button" class="module-button primary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="true">Setujui</button></article>`).join('')}
           </div>` : ''}
@@ -2373,35 +2442,84 @@ function pageMarkup(key) {
       <div class="attendance-overview-layout">
         <div class="attendance-status-cards">
           <article class="attendance-status present">
-            <span class="status-card-label">Present</span>
-            <strong class="status-card-val">${livePresent} <small>Employees</small></strong>
-            <div class="status-card-trend"><b>+3.2%</b> <span>from yesterday</span></div>
-            <footer class="status-card-footer"><span><b>${liveOnTime}</b> On-Time</span><span><b>${liveLate}</b> Late</span></footer>
+            <div class="att-card-top">
+              <i class="att-status-icon present-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </i>
+              <div class="att-status-copy">
+                <span class="status-card-label">Hadir</span>
+                <strong class="status-card-val">${livePresent} <small>Karyawan</small></strong>
+                <div class="status-card-trend"><b>↑ +3.2%</b> <span>dari kemarin</span></div>
+              </div>
+            </div>
+            <div class="att-card-spark">
+              <svg viewBox="0 0 200 44" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 36 C30 28, 55 18, 90 25 S150 32, 200 10 L200 44 L0 44 Z" fill="#eaf2fd" />
+                <path d="M0 36 C30 28, 55 18, 90 25 S150 32, 200 10" fill="none" stroke="#0962ea" stroke-width="2" />
+              </svg>
+            </div>
+            <footer class="status-card-footer">
+              <span class="foot-pill blue"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg><b>${liveOnTime}</b> Tepat Waktu</span>
+              <span class="foot-pill amber"><svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><b>${liveLate}</b> Terlambat</span>
+            </footer>
           </article>
+
           <article class="attendance-status leave">
-            <span class="status-card-label">On Leave</span>
-            <strong class="status-card-val">${liveOnLeave} <small>Employees</small></strong>
-            <div class="status-card-trend"><b>${leaveRequests.filter(r => r.status === 'Approved').length}</b> <span>approved requests</span></div>
-            <footer class="status-card-footer"><span><b>${Math.max(1, liveOnLeave - 1)}</b> Annual Leave</span><span><b>1</b> Sick Leave</span></footer>
+            <div class="att-card-top">
+              <i class="att-status-icon leave-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+              </i>
+              <div class="att-status-copy">
+                <span class="status-card-label">Cuti</span>
+                <strong class="status-card-val">${liveOnLeave} <small>Karyawan</small></strong>
+                <div class="status-card-trend"><b class="indigo-badge">${leaveRequests.filter(r => r.status === 'Approved').length}</b> <span>approved requests</span></div>
+              </div>
+            </div>
+            <div class="att-card-spark">
+              <svg viewBox="0 0 200 44" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 34 C35 28, 65 14, 105 26 S160 12, 200 22 L200 44 L0 44 Z" fill="#eef2ff" />
+                <path d="M0 34 C35 28, 65 14, 105 26 S160 12, 200 22" fill="none" stroke="#4f46e5" stroke-width="2" />
+              </svg>
+            </div>
+            <footer class="status-card-footer">
+              <span class="foot-pill blue"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2"/></svg><b>${Math.max(1, liveOnLeave - 1)}</b> Cuti Tahunan</span>
+              <span class="foot-pill blue"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><b>1</b> Cuti Sakit</span>
+            </footer>
           </article>
+
           <article class="attendance-status absent">
-            <span class="status-card-label">Absent</span>
-            <strong class="status-card-val">${liveAbsent} <small>Employees</small></strong>
-            <div class="status-card-trend down"><b>−0.8%</b> <span>from yesterday</span></div>
-            <footer class="status-card-footer"><span><b>${Math.max(0, liveAbsent - 1)}</b> Unplanned</span><span><b>${liveAbsent > 0 ? 1 : 0}</b> No Notice</span></footer>
+            <div class="att-card-top">
+              <i class="att-status-icon absent-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+              </i>
+              <div class="att-status-copy">
+                <span class="status-card-label">Tidak Hadir</span>
+                <strong class="status-card-val">${liveAbsent} <small>Karyawan</small></strong>
+                <div class="status-card-trend down"><b>↓ −0.8%</b> <span>dari kemarin</span></div>
+              </div>
+            </div>
+            <div class="att-card-spark">
+              <svg viewBox="0 0 200 44" preserveAspectRatio="none" aria-hidden="true">
+                <path d="M0 30 C40 16, 75 28, 115 20 S165 14, 200 26 L200 44 L0 44 Z" fill="#fef2f2" />
+                <path d="M0 30 C40 16, 75 28, 115 20 S165 14, 200 26" fill="none" stroke="#ef4444" stroke-width="2" />
+              </svg>
+            </div>
+            <footer class="status-card-footer">
+              <span class="foot-pill red"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><b>${Math.max(0, liveAbsent - 1)}</b> Unplanned</span>
+              <span class="foot-pill red"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg><b>${liveAbsent > 0 ? 1 : 0}</b> No Notice</span>
+            </footer>
           </article>
         </div>
+
         <section class="module-card attendance-chart-card">
           <div class="module-card-head">
-            <h2>Attendance Overview</h2>
-            <select class="module-select" data-select="att-chart-period"><option value="Last 6 Months">Last 6 Months</option><option value="This Year">This Year</option></select>
+            <div class="att-chart-title">
+              <i class="att-chart-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></i>
+              <h2>Kehadiran Overview</h2>
+            </div>
+            <select class="module-select" data-select="att-chart-period"><option value="Last 6 Months">6 Bulan Terakhir</option><option value="This Year">Tahun Ini</option></select>
           </div>
           <div class="attendance-chart-content">
-            <div class="attendance-chart-legend">
-              <span><i class="legend-circle pres-dot"></i>Present</span>
-              <span><i class="legend-circle leave-dot"></i>On Leave</span>
-              <span><i class="legend-circle abs-dot"></i>Absent</span>
-            </div>
             <div class="attendance-chart-wrap">
               <div class="attendance-y-axis">
                 <span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span>
@@ -2410,50 +2528,63 @@ function pageMarkup(key) {
                 ${chartBars.map(([m, pres, lv, abs]) => `
                   <div class="attendance-bar-col">
                     <div class="bar-track">
-                      <span class="bar-fill abs-fill" style="height:${abs}%" title="${m}: ${abs}% Absent"></span>
-                      <span class="bar-fill leave-fill" style="height:${lv}%" title="${m}: ${lv}% On Leave"></span>
-                      <span class="bar-fill pres-fill" style="height:${pres}%" title="${m}: ${pres}% Present"></span>
+                      <span class="bar-fill abs-fill" style="height:${abs}%" title="${m}: ${abs}% Tidak Hadir"></span>
+                      <span class="bar-fill leave-fill" style="height:${lv}%" title="${m}: ${lv}% Cuti"></span>
+                      <span class="bar-fill pres-fill" style="height:${pres}%" title="${m}: ${pres}% Hadir"></span>
                     </div>
                     <span class="bar-col-label">${m}</span>
                   </div>
                 `).join('')}
               </div>
             </div>
+            <div class="attendance-chart-legend">
+              <span><i class="legend-circle pres-dot"></i>Hadir</span>
+              <span><i class="legend-circle leave-dot"></i>Cuti</span>
+              <span><i class="legend-circle abs-dot"></i>Tidak Hadir</span>
+            </div>
           </div>
         </section>
       </div>
 
-      ${section('Employee Attendance', `
-        <div class="module-toolbar">
-          <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="attendance" placeholder="Search employee, department, status..." /></label>
-          <div class="filter-dropdown-wrap">
-            <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'All Status'} <span>⌄</span></button>
-            <div class="filter-dropdown-menu" id="attendanceFilterDropdown" style="display:none">
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="All Status">All Status</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="On-Time">On-Time</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Late">Late</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="On Leave">On Leave</button>
-              <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Absent">Absent</button>
-            </div>
+      <section class="module-card attendance-table-card">
+        <div class="att-table-card-head">
+          <div class="att-table-title">
+            <i class="att-title-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg></i>
+            <h2>Kehadiran Karyawan</h2>
           </div>
-          <span class="toolbar-note">Sort by:</span>
-          <select id="attendanceSortSelect"><option value="0">Name</option><option value="1">Job Title</option><option value="4">Check-In / Check-Out</option><option value="7">Status</option></select>
-          <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
-            <button class="module-button secondary" data-action="export-attendance">Export CSV</button>
+          <div class="module-toolbar att-inline-toolbar">
+            <label class="module-search"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input data-filter="attendance" placeholder="Cari karyawan, department, status..." /></label>
+            <div class="filter-dropdown-wrap">
+              <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'Semua Status'} <span>⌄</span></button>
+              <div class="filter-dropdown-menu" id="attendanceFilterDropdown" style="display:none">
+                <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="All Status">Semua Status</button>
+                <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="On-Time">Tepat Waktu</button>
+                <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Late">Terlambat</button>
+                <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="On Leave">Cuti</button>
+                <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Absent">Tidak Hadir</button>
+              </div>
+            </div>
+            <span class="toolbar-note">Urutkan:</span>
+            <select id="attendanceSortSelect"><option value="0">Nama</option><option value="1">Jabatan</option><option value="4">Check-In / Check-Out</option><option value="7">Status</option></select>
+            <button class="module-button secondary att-export-btn" data-action="export-attendance">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Ekspor CSV</span>
+            </button>
           </div>
         </div>
         <div class="module-table-wrap">
           <table class="module-table attendance-full-table">
             <thead>
               <tr>
-                <th class="sortable" data-col="0">Employee Name <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
-                <th class="sortable" data-col="1">Job Title &amp; Dept <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
-                <th class="sortable" data-col="2">Date <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
-                <th class="sortable" data-col="3">Work Model <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
-                <th class="sortable" data-col="4">Check-In - Check-Out <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
-                <th class="sortable" data-col="5">Working Hours <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
-                <th class="sortable" data-col="6">Overtime <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th class="sortable" data-col="0">Karyawan <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th class="sortable" data-col="1">Jabatan &amp; Dept <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th class="sortable" data-col="2">Tanggal <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th class="sortable" data-col="3">Model Kerja <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th class="sortable" data-col="4">Check-In – Check-Out <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th class="sortable" data-col="5">Working Jam <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th class="sortable" data-col="6">Lembur <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
                 <th class="sortable" data-col="7">Status <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-left:4px"><path d="m7 15 5 5 5-5M7 9l5-5 5 5"/></svg></th>
+                <th style="text-align:center">Aksi</th>
               </tr>
             </thead>
             <tbody>${attendanceRows}</tbody>
@@ -2463,7 +2594,7 @@ function pageMarkup(key) {
           <label>Show <select><option>10</option><option>25</option><option>50</option></select> of ${allAttendanceItems.length} results</label>
           <div><button>‹</button><button class="page-current">1</button><button>2</button><button>›</button></div>
         </div>
-      `)}
+      </section>
     `;
   }
 

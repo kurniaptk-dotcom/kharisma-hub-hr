@@ -73,7 +73,17 @@ function installSupabaseAuthGate() {
   if (!window.KharismaDB?.auth) return;
   const root = document.querySelector('.app-shell');
   if (!root) return;
-  root.hidden = true;
+
+  const hasCachedSession = Boolean(
+    (typeof localStorage !== 'undefined' &&
+      Object.keys(localStorage).some(k => k.startsWith('sb-') && k.endsWith('-auth-token'))) ||
+    (typeof sessionStorage !== 'undefined' && sessionStorage.getItem('kharisma_auth_active')) ||
+    (typeof localStorage !== 'undefined' && localStorage.getItem('kharisma_auth_active'))
+  );
+
+  if (!hasCachedSession) {
+    root.hidden = true;
+  }
   const gate = document.createElement('section');
   gate.className = 'auth-gate';
   gate.hidden = true;
@@ -132,9 +142,13 @@ function installSupabaseAuthGate() {
     applyingSessionToken = session?.access_token || '';
     applyingSession = (async () => {
     authenticatedSupabaseSession = session || null;
-    if (!session) { authenticatedUserProfile = null; showMode('supabaseLoginForm'); setLocked(true); return false; }
+    if (!session) {
+      try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
+      authenticatedUserProfile = null; showMode('supabaseLoginForm'); setLocked(true); return false;
+    }
     const { profile, error } = await window.KharismaDB.auth.getProfile(session.user.id);
     if (error || !profile || profile.status === 'Inactive') {
+      try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
       setMessage('#supabaseLoginError', 'Akun tidak aktif atau profil belum tersedia. Hubungi administrator perusahaan.');
       await window.KharismaDB.auth.signOut();
       authenticatedSupabaseSession = null;
@@ -144,10 +158,12 @@ function installSupabaseAuthGate() {
     }
     if (profile.status === 'Pending') { showMode('supabaseSetPasswordForm'); setLocked(true); return false; }
     if (!['Admin','Supervisor','Employee'].includes(profile.role) || (profile.role === 'Employee' && !profile.employee_id) || (profile.role === 'Supervisor' && !profile.department)) {
+      try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
       setMessage('#supabaseLoginError', 'Profil akun belum memiliki peran, karyawan, atau departemen yang valid. Hubungi administrator.');
       await window.KharismaDB.auth.signOut(); authenticatedSupabaseSession = null; showMode('supabaseLoginForm'); setLocked(true); return false;
     }
     authenticatedUserProfile = profile;
+    try { sessionStorage.setItem('kharisma_auth_active', '1'); localStorage.setItem('kharisma_auth_active', '1'); } catch {}
     const role = profile.role;
     const account = { id: profile.id, name: profile.full_name || session.user.email, email: session.user.email, role, department: profile.department || '', title: profile.title || role, status: profile.status || 'Active' };
     userAccounts.splice(0, userAccounts.length, account);
@@ -205,7 +221,11 @@ function installSupabaseAuthGate() {
       if (actions) {
         const button = document.createElement('button');
         button.type = 'button'; button.id = 'supabaseLogoutButton'; button.className = 'module-button secondary'; button.textContent = 'Keluar';
-        button.addEventListener('click', async () => { await window.KharismaDB.auth.signOut(); window.location.reload(); });
+        button.addEventListener('click', async () => {
+          try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
+          await window.KharismaDB.auth.signOut();
+          window.location.reload();
+        });
         actions.prepend(button);
       }
     }
@@ -283,7 +303,9 @@ function installSupabaseAuthGate() {
       root.removeAttribute('data-auth-pending');
       return;
     }
-    setLocked(true);
+    if (!hasCachedSession && !authenticatedSupabaseSession) {
+      setLocked(true);
+    }
     if (!window.KharismaDB.auth.enabled) {
       showConfigurationError(config?.error || 'Login belum dikonfigurasi. Administrator harus menambahkan SUPABASE_ANON_KEY di Vercel.');
       return;
@@ -294,10 +316,26 @@ function installSupabaseAuthGate() {
     }
     setMessage('#supabaseAuthHint', 'Masuk menggunakan akun yang diundang administrator.');
     const { session } = await window.KharismaDB.auth.getSession();
-    if (session) await applySession(session);
-    else showMode('supabaseLoginForm');
+    if (session) {
+      const ok = await applySession(session);
+      if (!ok) {
+        try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
+        showMode('supabaseLoginForm');
+        setLocked(true);
+      }
+    } else {
+      try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
+      showMode('supabaseLoginForm');
+      setLocked(true);
+    }
     window.KharismaDB.auth.onAuthStateChange((event, nextSession) => {
-      if (event === 'SIGNED_OUT') { authenticatedSupabaseSession = null; authenticatedUserProfile = null; showMode('supabaseLoginForm'); setLocked(true); }
+      if (event === 'SIGNED_OUT') {
+        try { sessionStorage.removeItem('kharisma_auth_active'); localStorage.removeItem('kharisma_auth_active'); } catch {}
+        authenticatedSupabaseSession = null;
+        authenticatedUserProfile = null;
+        showMode('supabaseLoginForm');
+        setLocked(true);
+      }
       else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && nextSession) applySession(nextSession);
       else if (event === 'PASSWORD_RECOVERY' && nextSession) { showMode('supabaseResetPasswordForm'); setLocked(true); }
     });
@@ -2897,33 +2935,37 @@ function openModule(key, updateUrl = true, params = null) {
   const targetFile = keyToFile[key] || 'index.html';
   const targetBase = targetFile.split('?')[0].replace(/\.html$/, '');
 
-  if (updateUrl && targetBase !== currentFile && !window.location.protocol.startsWith('file')) {
+  if (updateUrl && !window.location.protocol.startsWith('file')) {
     let dest = targetFile;
     if (params && Object.keys(params).length && !targetFile.includes('?')) {
       dest += '?' + new URLSearchParams(params).toString();
     }
-    window.location.href = dest;
-    return;
-  }
-
-  if (updateUrl && window.location.protocol.startsWith('file') && targetBase !== currentFile) {
-    window.location.href = targetFile;
-    return;
+    try {
+      const currentLoc = window.location.pathname.split('/').pop().toLowerCase() || 'index.html';
+      if (currentLoc !== dest) {
+        history.pushState({ module: key, params }, '', dest);
+      }
+    } catch {}
   }
 
   if (key === 'dashboard') {
-    if (dashboardView) dashboardView.hidden = false;
-    if (moduleView) moduleView.hidden = true;
-    const searchInput = document.querySelector('#searchInput');
-    if (searchInput) searchInput.value = '';
-    const greeting = document.querySelector('.greeting');
-    if (greeting) {
-      greeting.classList.remove('inbox-heading');
-      greeting.innerHTML = `<span>Hello ${safe(userProfile.name)}!</span><strong>Good Morning</strong>`;
+    if (dashboardView) {
+      dashboardView.hidden = false;
+      if (moduleView) moduleView.hidden = true;
+      const searchInput = document.querySelector('#searchInput');
+      if (searchInput) searchInput.value = '';
+      const greeting = document.querySelector('.greeting');
+      if (greeting) {
+        greeting.classList.remove('inbox-heading');
+        greeting.innerHTML = `<span>Hello ${safe(userProfile.name)}!</span><strong>Good Morning</strong>`;
+      }
+      renderDashboardMiniCalendar();
+      renderDashboardScheduleList();
+      return;
+    } else {
+      window.location.href = 'index.html';
+      return;
     }
-    renderDashboardMiniCalendar();
-    renderDashboardScheduleList();
-    return;
   }
 
   if (!moduleTitles[key]) return;
@@ -3309,28 +3351,27 @@ function renderInboxPage() {
    Event Listeners & Dispatchers
    ========================================================================== */
 
-// 1. Navigation links
+// 1. Navigation links (Seamless SPA routing)
 document.querySelectorAll('.nav-link').forEach((link) => {
-  const href = link.getAttribute('href') || '';
-  if (href.endsWith('.html')) {
-    // Normal multi-page browser navigation
-    return;
-  }
   link.addEventListener('click', (event) => {
     event.preventDefault();
-    const mod = link.dataset.module || href.replace('#', '');
+    const href = link.getAttribute('href') || '';
+    const file = href.split('?')[0].replace(/\.html$/, '').replace(/^\.\//, '');
+    const mod = link.dataset.module || (file === 'index' ? 'dashboard' : file);
     openModule(mod, true);
   });
 });
 
 document.querySelector('.brand')?.addEventListener('click', (event) => {
-  const href = event.currentTarget.getAttribute('href') || '';
-  if (href.endsWith('.html')) return;
   event.preventDefault();
   openModule('dashboard', true);
 });
 
-// 2. Hash routing listener
+// 2. Browser history & popstate listener
+window.addEventListener('popstate', () => {
+  const { key, params } = resolveRoute();
+  openModule(key, false, Object.fromEntries(params.entries()));
+});
 window.addEventListener('hashchange', () => {
   const { key, params } = resolveRoute();
   openModule(key, false, Object.fromEntries(params.entries()));

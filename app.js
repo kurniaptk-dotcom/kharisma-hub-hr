@@ -1336,7 +1336,7 @@ function renderDashboardSummary() {
     const rate = total ? Math.round((onTimeCount / total) * 100) : 92;
 
     if (attendanceRateEl) {
-      attendanceRateEl.innerHTML = `${rate}% <small>Hadir • ${leaveCount} Cuti, ${lateCount} Terlambat</small>`;
+      attendanceRateEl.innerHTML = `${rate}% <small>Hadir — <b>${leaveCount}</b> Cuti, ${lateCount} Terlambat</small>`;
     }
 
     const scopedLeaves = isSupervisor()
@@ -1351,7 +1351,7 @@ function renderDashboardSummary() {
       leaveRequestsEl.innerHTML = `${approvedLeave} <small>Disetujui</small> <b>${pendingLeave}</b> <small>Menunggu Tinjauan</small>`;
     }
     if (leaveBandEl) {
-      leaveBandEl.innerHTML = `Tercatat <strong>${scopedLeaves.length} pengajuan cuti</strong> ${isSupervisor() ? 'di divisi Anda' : 'dalam sistem'}`;
+      leaveBandEl.innerHTML = `Anda telah mengajukan <strong>${scopedLeaves.length} permintaan cuti</strong> bulan ini`;
     }
 
     if (isSupervisor()) {
@@ -1370,10 +1370,10 @@ function renderDashboardSummary() {
     } else {
       const appCount = applicantsData.length;
       if (applicantsEl) {
-        applicantsEl.innerHTML = `${appCount} <small>Pelamar Aktif</small>`;
+        applicantsEl.innerHTML = `+12% <small>dibandingkan bulan lalu</small>`;
       }
       if (applicantsBandEl) {
-        applicantsBandEl.innerHTML = `Tim Anda memiliki <strong>${appCount} pelamar kerja aktif</strong>`;
+        applicantsBandEl.innerHTML = `Tim Anda memiliki <strong>${appCount} pelamar baru</strong>`;
       }
     }
   }

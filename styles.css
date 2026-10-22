@@ -2467,119 +2467,262 @@ body{color:var(--text);background:#f8fafc;font-size:14px;line-height:1.45}
   color: #0962ea;
 }
 
-/* Dashboard Figma TeamHub Polish & Quick Self-Attendance Bar */
+/* Dashboard Figma TeamHub Exact Layout Match (Kharisma Blue Theme) */
+.sidebar-promo {
+  background: #eaf2fd !important;
+  color: #0c1e36 !important;
+  box-shadow: none !important;
+  border: 1px solid #dbeafe;
+  border-radius: 14px !important;
+  padding: 16px 14px !important;
+}
+.sidebar-promo::after {
+  display: none !important;
+}
+.sidebar-promo .promo-tag {
+  display: none !important;
+}
+.sidebar-promo strong,
+.sidebar-promo strong .promo-accent {
+  color: #0c1e36 !important;
+  font: 800 14.5px/1.3 Manrope, sans-serif !important;
+}
+.sidebar-promo p {
+  color: #475569 !important;
+  font-size: 11.5px !important;
+  line-height: 1.45 !important;
+  margin: 6px 0 12px !important;
+}
+.sidebar-promo a {
+  height: 34px !important;
+  border-radius: 9px !important;
+  background: #0962ea !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  font-weight: 700 !important;
+  box-shadow: 0 4px 10px rgba(9, 98, 234, 0.22) !important;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 14px;
+}
 .summary-card {
+  background: #ffffff !important;
+  border: 1px solid #eef2f6 !important;
+  border-radius: 16px !important;
+  padding: 14px 14px 10px !important;
+  min-height: 132px !important;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.02) !important;
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 .summary-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 10px 24px rgba(9, 98, 234, 0.08);
-  border-color: #bfdbfe;
+  box-shadow: 0 8px 20px rgba(9, 98, 234, 0.07) !important;
+  border-color: #cbd5e1 !important;
 }
-.summary-card:first-child {
-  background: linear-gradient(145deg, #0962ea 0%, #074ec0 100%);
-  border-color: #0962ea;
-  color: #fff;
-}
-.summary-card:first-child .summary-top span,
-.summary-card:first-child .summary-value,
-.summary-card:first-child .summary-value small,
-.summary-card:first-child .summary-value b,
-.summary-card:first-child .kebab {
-  color: #ffffff;
-}
-.summary-card:first-child .summary-band {
-  background: rgba(12, 30, 54, 0.24);
-  border-top-color: rgba(255, 255, 255, 0.14);
-  color: #e2e8f0;
-}
-.summary-card:first-child .summary-band strong {
-  color: #ffffff;
-}
-.summary-title-with-icon {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600 !important;
-}
-.summary-icon-badge {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  display: inline-grid;
-  place-items: center;
-  background: #eaf2fd;
-  color: #0962ea;
-  flex-shrink: 0;
-}
-.summary-card:first-child .summary-icon-badge {
-  background: rgba(255, 255, 255, 0.18);
-  color: #ffffff;
-}
-.dash-quick-attendance {
+.summary-top {
+  padding: 0 !important;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 14px 18px;
-  margin-bottom: 14px;
-  background: linear-gradient(90deg, #ffffff 0%, #f4f9ff 100%);
-  border: 1px solid #cfe2ff;
-  border-radius: 14px;
-  box-shadow: 0 4px 14px rgba(9, 98, 234, 0.05);
-  flex-wrap: wrap;
 }
-.dash-qa-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  min-width: 0;
+.summary-top span {
+  color: #64748b !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
 }
-.dash-qa-icon {
-  width: 42px;
-  height: 42px;
-  border-radius: 12px;
-  background: #0962ea;
-  color: #ffffff;
+.summary-card .kebab,
+.panel .kebab {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f8fafc;
+  color: #64748b;
   display: grid;
   place-items: center;
-  flex-shrink: 0;
-  box-shadow: 0 6px 14px rgba(9, 98, 234, 0.24);
+  border: 0;
+  cursor: pointer;
 }
-.dash-qa-copy {
-  display: grid;
-  gap: 3px;
-}
-.dash-qa-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.dash-qa-title-row strong {
-  font: 800 14px Manrope, sans-serif;
-  color: #0c1e36;
-}
-.dash-qa-badge {
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 700;
+.summary-card .kebab:hover,
+.panel .kebab:hover {
   background: #eaf2fd;
   color: #0962ea;
 }
-.dash-qa-badge.active {
-  background: #dcfce7;
-  color: #15803d;
+.summary-value {
+  padding: 6px 0 10px !important;
+  color: #0c1e36 !important;
+  font: 800 26px/1.15 Manrope, sans-serif !important;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
 }
-.dash-qa-copy p {
+.summary-value small {
+  color: #64748b !important;
+  font: 400 12px 'DM Sans', sans-serif !important;
+}
+.summary-value small b {
+  font: 700 12px 'DM Sans', sans-serif !important;
+  color: #0c1e36 !important;
   margin: 0;
-  font-size: 12px;
-  color: #475569;
 }
-.dash-qa-actions {
+.summary-value > b {
+  color: #0c1e36 !important;
+  font: 800 24px Manrope, sans-serif !important;
+  margin-left: 6px;
+}
+.summary-band {
+  margin: auto 0 0 !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  background: #eaf2fd !important;
+  border-top: 0 !important;
+  color: #475569 !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+.summary-band strong {
+  color: #0c1e36 !important;
+  font-weight: 700 !important;
+}
+
+/* Unified Dashboard Bento Grid matching Figma Screenshot */
+.dashboard-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 2.06fr) minmax(0, 1fr) !important;
+  gap: 14px !important;
+  align-items: stretch !important;
+}
+.dashboard-left-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.dashboard-left-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
+  gap: 14px;
+  align-items: stretch;
+}
+.dashboard-left-top > .column {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.dashboard-left-top .calendar-panel,
+.dashboard-left-top .satisfaction-panel {
+  flex: 1;
+}
+.dashboard-grid > .column-three {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+.dashboard-grid > .column-three .activities-panel {
+  flex: 1;
+}
+.dashboard-grid .panel {
+  border-radius: 16px !important;
+  border: 1px solid #eef2f6 !important;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.02);
+  padding: 18px !important;
+}
+
+/* Satisfaction stars & list dividers */
+.satisfaction-overall-stars {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.stars-gold {
+  color: #f59e0b;
+  font-style: normal;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+.satisfaction-overall-stars b {
+  font: 700 13px Manrope, sans-serif;
+  color: #0c1e36;
+}
+.satisfaction-note {
+  text-align: center;
+  justify-content: center;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  background: #eaf2fd !important;
+}
+.satisfaction-list > div {
+  padding-bottom: 9px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.satisfaction-list > div:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+/* Employee Attendance Card Totals & Table Header */
+.employee-attendance .attendance-totals {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  margin: 10px 0 14px !important;
+}
+.employee-attendance .attendance-totals span {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 22px;
+  border-right: 1px solid #e2e8f0;
+  color: #64748b;
+  font-size: 12.5px;
+}
+.employee-attendance .attendance-totals span:first-child {
+  padding-left: 0;
+}
+.employee-attendance .attendance-totals span:last-child {
+  border-right: 0;
+}
+.employee-attendance .attendance-totals b {
+  font: 800 24px/1 Manrope, sans-serif !important;
+  color: #0c1e36 !important;
+}
+.employee-attendance table thead tr {
+  background: #f8fafc;
+}
+.employee-attendance table th {
+  padding: 9px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: none;
+}
+.employee-attendance table th span {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-left: 2px;
+}
+.employee-attendance table th:first-child {
+  border-radius: 8px 0 0 8px;
+}
+.employee-attendance table th:last-child {
+  border-radius: 0 8px 8px 0;
+}
+
+@media (max-width: 1080px) {
+  .dashboard-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .dashboard-left-top {
+    grid-template-columns: 1fr;
+  }
 }

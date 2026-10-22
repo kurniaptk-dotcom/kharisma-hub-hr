@@ -30,7 +30,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261022_1830" />
+    <link rel="stylesheet" href="./styles.css?v=20261022_1900" />
   </head>
   <body>
     <div class="app-shell">
@@ -53,7 +53,7 @@
         </nav>
         <div class="sidebar-promo">
           <span class="promo-tag">Kharisma Hub Pro</span>
-          <strong class="promo-title">Innovate. Collaborate. <span class="promo-accent">Elevate.</span></strong>
+          <strong class="promo-title">Tingkatkan Sistem SDM Anda</strong>
           <p>Sistem manajemen SDM terintegrasi untuk akselerasi pertumbuhan dan performa tim.</p>
           <a href="#upgrade" class="promo-btn">Dapatkan Kharisma Pro</a>
         </div>
@@ -73,63 +73,81 @@
 
         <div id="dashboardView">
         <section class="summary-grid" aria-label="HR summary">
-          <article class="summary-card interactive-card" data-action="nav-employees" title="Buka Direktori Karyawan"><div class="summary-top"><span class="summary-title-with-icon"><i class="summary-icon-badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></i>Total Karyawan</span><button class="kebab" data-action="kebab-employees" aria-label="Total employees options" title="Tambah Karyawan">···</button></div><div class="summary-value" id="dashTotalEmployees">12 <small>Karyawan</small></div><div class="summary-band">Bagian dari <strong>tim yang terus berkembang!</strong></div></article>
-          <article class="summary-card interactive-card" data-action="nav-attendance" title="Buka Rekap Kehadiran"><div class="summary-top"><span class="summary-title-with-icon"><i class="summary-icon-badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></i>Kehadiran</span><button class="kebab" data-action="kebab-attendance" aria-label="Attendance options" title="Buka Presensi">···</button></div><div class="summary-value" id="dashAttendanceRate">92% <small>Hadir · Kehadiran Sangat Baik</small></div><div class="summary-band">Tingkat kehadiran Anda bulan ini <strong>sangat baik</strong></div></article>
-          <article class="summary-card interactive-card" data-action="nav-leave" title="Buka Manajemen Cuti"><div class="summary-top"><span class="summary-title-with-icon"><i class="summary-icon-badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></i>Permintaan Cuti</span><button class="kebab" data-action="kebab-leave" aria-label="Leave request options" title="Ajukan Cuti">···</button></div><div class="summary-value" id="dashLeaveRequests">1 <small>Disetujui</small> <b>1</b> <small>Menunggu Tinjauan</small></div><div class="summary-band" id="dashLeaveBand">Tercatat <strong>2 pengajuan cuti</strong> bulan ini</div></article>
-          <article class="summary-card interactive-card" data-action="nav-recruitment" title="Buka Rekrutmen & Pelamar"><div class="summary-top"><span class="summary-title-with-icon"><i class="summary-icon-badge"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="10" cy="10" r="7"/><path d="m21 21-4.35-4.35"/></svg></i>Pelamar Kerja</span><button class="kebab" data-action="kebab-recruitment" aria-label="Applicant options" title="Tambah Pelamar">···</button></div><div class="summary-value" id="dashApplicants">10 <small>Pelamar Aktif</small></div><div class="summary-band" id="dashApplicantsBand">Tim Anda memiliki <strong>10 pelamar baru</strong></div></article>
+          <article class="summary-card interactive-card" data-action="nav-employees" title="Buka Direktori Karyawan"><div class="summary-top"><span>Total Karyawan</span><button class="kebab" data-action="kebab-employees" aria-label="Total employees options" title="Opsi Karyawan">···</button></div><div class="summary-value" id="dashTotalEmployees">128 <small>Karyawan</small></div><div class="summary-band">Anda bagian dari <strong>tim yang terus berkembang!</strong></div></article>
+          <article class="summary-card interactive-card" data-action="nav-attendance" title="Buka Rekap Kehadiran"><div class="summary-top"><span>Kehadiran</span><button class="kebab" data-action="kebab-attendance" aria-label="Attendance options" title="Opsi Presensi">···</button></div><div class="summary-value" id="dashAttendanceRate">92% <small>Hadir — <b>3</b> Cuti, 1 Terlambat</small></div><div class="summary-band">Kehadiran Anda bulan ini terlihat <strong>sangat baik</strong></div></article>
+          <article class="summary-card interactive-card" data-action="nav-leave" title="Buka Manajemen Cuti"><div class="summary-top"><span>Permintaan Cuti</span><button class="kebab" data-action="kebab-leave" aria-label="Leave request options" title="Opsi Cuti">···</button></div><div class="summary-value" id="dashLeaveRequests">1 <small>Disetujui</small> <b>1</b> <small>Menunggu Tinjauan</small></div><div class="summary-band" id="dashLeaveBand">Tercatat <strong>2 pengajuan cuti</strong> bulan ini</div></article>
+          <article class="summary-card interactive-card" data-action="nav-recruitment" title="Buka Rekrutmen & Pelamar"><div class="summary-top"><span>Pelamar Kerja</span><button class="kebab" data-action="kebab-recruitment" aria-label="Applicant options" title="Opsi Rekrutmen">···</button></div><div class="summary-value" id="dashApplicants">+12% <small>dibandingkan bulan lalu</small></div><div class="summary-band" id="dashApplicantsBand">Tim Anda memiliki <strong>37 pelamar baru</strong></div></article>
         </section>
 
-        <section class="dash-quick-attendance" id="dashQuickAttendance" aria-label="Presensi Cepat Hari Ini"><div class="dash-qa-left"><div class="dash-qa-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="dash-qa-copy"><div class="dash-qa-title-row"><strong>Presensi Mandiri Hari Ini</strong><span class="dash-qa-badge" id="dashQaStatusBadge">Belum Check-In</span></div><p id="dashQaSubtext">Shift Reguler (09:00 - 17:00) · Klik tombol di kanan untuk mencatat jam masuk/pulang secara langsung.</p></div></div><div class="dash-qa-actions"><button type="button" class="module-button primary" data-action="clock-in" id="dashQaClockBtn">Masuk Kerja (Clock In)</button><a href="attendance.html" class="module-button secondary">Buka Modul Kehadiran →</a></div></section>
-
         <div class="dashboard-grid">
-          <div class="column column-one">
-            <section class="panel calendar-panel" id="calendar">
-              <div class="section-title"><button class="month-title" id="monthButton">Oktober 2026 <span>⌄</span></button><div class="calendar-arrows"><button id="prevMonth" aria-label="Previous month">‹</button><button id="nextMonth" aria-label="Next month">›</button></div></div>
-              <div class="calendar-grid" id="calendarGrid"></div>
-              <div class="panel-divider"></div>
-              <div class="section-title schedule-title"><h2>Jadwal Kegiatan</h2><button class="date-filter" id="scheduleDate">22 Okt <span>⌄</span></button></div>
-              <div class="schedule-list" id="schedules">
-                <article class="schedule-card"><span class="schedule-type">Talent Acquisition</span><strong>Interview — Product Designer Candidate</strong><div><span class="tag">Meeting Room C</span><small>09:00 AM</small><span class="avatar-stack"><i class="avatar mini p1">MT</i><i class="avatar mini p2">ER</i><i class="avatar mini p3">JC</i><b>+3</b></span></div></article>
-                <article class="schedule-card"><span class="schedule-type">Employee Development</span><strong>Mid-Year Performance Review — Design Dept</strong><div><span class="tag">Notion Review Sheet</span><small>01:00 PM</small><span class="avatar-stack"><i class="avatar mini p4">MT</i><i class="avatar mini p5">ER</i><i class="avatar mini p6">JC</i><b>+2</b></span></div></article>
-                <article class="schedule-card"><span class="schedule-type">Workplace Engagement</span><strong>Quarterly Policy Review Meeting</strong><div><span class="tag">Conference Room 1A</span><small>03:00 PM</small><span class="avatar-stack"><i class="avatar mini p7">MT</i><i class="avatar mini p8">ER</i><i class="avatar mini p9">JC</i><b>+2</b></span></div></article>
+          <div class="dashboard-left-main">
+            <div class="dashboard-left-top">
+              <div class="column column-one">
+                <section class="panel calendar-panel" id="calendar">
+                  <div class="section-title"><button class="month-title" id="monthButton">Oktober 2026 <span>⌄</span></button><div class="calendar-arrows"><button id="prevMonth" aria-label="Previous month">‹</button><button id="nextMonth" aria-label="Next month">›</button></div></div>
+                  <div class="calendar-grid" id="calendarGrid"></div>
+                  <div class="panel-divider"></div>
+                  <div class="section-title schedule-title"><h2>Jadwal Kegiatan</h2><button class="date-filter" id="scheduleDate"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>22 Okt <span>⌄</span></button></div>
+                  <div class="schedule-list" id="schedules">
+                    <article class="schedule-card"><span class="schedule-type">Talent Acquisition</span><strong>Interview — Product Designer Candidate</strong><div><span class="tag">Meeting Room C</span><small>09:00 AM</small><span class="avatar-stack"><i class="avatar mini p1">MT</i><i class="avatar mini p2">ER</i><i class="avatar mini p3">JC</i><b>+3</b></span></div></article>
+                    <article class="schedule-card"><span class="schedule-type">Employee Development</span><strong>Mid-Year Performance Review — Design Dept</strong><div><span class="tag">Notion Review Sheet</span><small>01:00 PM</small><span class="avatar-stack"><i class="avatar mini p4">MT</i><i class="avatar mini p5">ER</i><i class="avatar mini p6">JC</i><b>+2</b></span></div></article>
+                    <article class="schedule-card"><span class="schedule-type">Workplace Engagement</span><strong>Quarterly Policy Review Meeting</strong><div><span class="tag">Conference Room 1A</span><small>03:00 PM</small><span class="avatar-stack"><i class="avatar mini p7">MT</i><i class="avatar mini p8">ER</i><i class="avatar mini p9">JC</i><b>+2</b></span></div></article>
+                  </div>
+                </section>
               </div>
-            </section>
-          </div>
 
-          <div class="column column-two">
-            <section class="panel attendance-report" id="reports">
-              <div class="section-title"><h2>Laporan Kehadiran</h2><button class="date-filter period-button">This Month <span>⌄</span></button></div>
-              <div class="report-score">92% <span>↗ +1.54%</span></div>
-              <p class="muted">Tingkat Kehadiran</p>
-              <div class="heatmap">
-                <div class="heatmap-time">
-                  <span>8:00 AM</span><span>8:30 AM</span><span>9:00 AM</span><span>9:30 AM</span><span>10:00 AM</span><span>10:30 AM</span>
-                </div>
-                <div class="heatmap-content">
-                  <div class="heat-row"><i class="h-dark"></i><i class="h-dark"></i><i class="h-dark"></i><i class="h-dark"></i><i class="h-dark"></i></div>
-                  <div class="heat-row"><i class="h-mid"></i><i class="h-mid"></i><i class="h-mid"></i><i class="h-mid"></i><i class="h-mid"></i></div>
-                  <div class="heat-row"><i class="h-light"></i><i class="h-mid"></i><i class="h-light"></i><i class="h-light"></i><i class="h-light"></i></div>
-                  <div class="heat-row"><i class="h-empty"></i><i class="h-light"></i><i class="h-mid"></i><i class="h-light"></i><i class="h-empty"></i></div>
-                  <div class="heat-row"><i class="h-empty"></i><i class="h-empty"></i><i class="h-light"></i><i class="h-empty"></i><i class="h-empty"></i></div>
-                  <div class="heat-row"><i class="h-empty"></i><i class="h-empty"></i><i class="h-empty"></i><i class="h-empty"></i><i class="h-empty"></i></div>
-                </div>
-              </div>
-              <div class="weekday-row"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span></div>
-            </section>
+              <div class="column column-two">
+                <section class="panel attendance-report" id="reports">
+                  <div class="section-title"><h2>Laporan Kehadiran</h2><button class="date-filter period-button">This Month <span>⌄</span></button></div>
+                  <div class="report-score">92% <span>↗ +1.54%</span></div>
+                  <p class="muted">Tingkat Kehadiran</p>
+                  <div class="heatmap">
+                    <div class="heatmap-time">
+                      <span>8:00 AM</span><span>8:30 AM</span><span>9:00 AM</span><span>9:30 AM</span><span>10:00 AM</span><span>10:30 AM</span>
+                    </div>
+                    <div class="heatmap-content">
+                      <div class="heat-row"><i class="h-dark"></i><i class="h-dark"></i><i class="h-dark"></i><i class="h-dark"></i><i class="h-dark"></i></div>
+                      <div class="heat-row"><i class="h-mid"></i><i class="h-mid"></i><i class="h-dark"></i><i class="h-dark"></i><i class="h-mid"></i></div>
+                      <div class="heat-row"><i class="h-light"></i><i class="h-mid"></i><i class="h-dark"></i><i class="h-mid"></i><i class="h-mid"></i></div>
+                      <div class="heat-row"><i class="h-empty"></i><i class="h-light"></i><i class="h-mid"></i><i class="h-light"></i><i class="h-empty"></i></div>
+                      <div class="heat-row"><i class="h-empty"></i><i class="h-empty"></i><i class="h-light"></i><i class="h-empty"></i><i class="h-empty"></i></div>
+                      <div class="heat-row"><i class="h-empty"></i><i class="h-empty"></i><i class="h-empty"></i><i class="h-empty"></i><i class="h-empty"></i></div>
+                    </div>
+                  </div>
+                  <div class="weekday-row"><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span></div>
+                </section>
 
-            <section class="panel satisfaction-panel">
-              <div class="section-title"><h2>Kepuasan Karyawan <span class="tiny-menu">···</span></h2></div>
-              <div class="satisfaction-main">
-                <div><strong>73%</strong><span>Karyawan Puas</span></div>
-                <div class="gauge"><div class="gauge-track"></div><div class="gauge-needle"></div><i></i></div>
+                <section class="panel satisfaction-panel">
+                  <div class="section-title"><h2>Kepuasan Karyawan</h2><button class="kebab" aria-label="Satisfaction options">···</button></div>
+                  <div class="satisfaction-main">
+                    <div>
+                      <strong>73%</strong>
+                      <span>Karyawan Puas</span>
+                      <div class="satisfaction-overall-stars"><i class="stars-gold">★★★★★</i> <b>4.2/5</b></div>
+                    </div>
+                    <div class="gauge"><div class="gauge-track"></div><div class="gauge-needle"></div><i></i></div>
+                  </div>
+                  <div class="satisfaction-note">Ini <strong>meningkat 6%</strong> dibanding bulan lalu</div>
+                  <div class="satisfaction-list">
+                    <div><span><strong>Kompensasi &amp; Tunjangan</strong><small>78% Kepuasan</small></span><b class="stars">★★★★★ <small>4.5/5</small></b></div>
+                    <div><span><strong>Budaya Kerja</strong><small>74% Kepuasan</small></span><b class="stars">★★★★★ <small>4.3/5</small></b></div>
+                    <div><span><strong>Keseimbangan Kerja &amp; Kehidupan</strong><small>71% Kepuasan</small></span><b class="stars">★★★★★ <small>4.1/5</small></b></div>
+                    <div><span><strong>Peluang Pengembangan Karier</strong><small>68% Kepuasan</small></span><b class="stars">★★★★★ <small>3.9/5</small></b></div>
+                  </div>
+                </section>
               </div>
-              <div class="satisfaction-note">Ini <strong>meningkat 6%</strong> dibanding bulan lalu</div>
-              <div class="satisfaction-list">
-                <div><span><strong>Kompensasi &amp; Tunjangan</strong><small>78% Kepuasan</small></span><b class="stars">★★★★★ <small>4.5/5</small></b></div>
-                <div><span><strong>Budaya Kerja</strong><small>74% Kepuasan</small></span><b class="stars">★★★★★ <small>4.3/5</small></b></div>
-                <div><span><strong>Keseimbangan Kerja &amp; Kehidupan</strong><small>71% Kepuasan</small></span><b class="stars">★★★★★ <small>4.1/5</small></b></div>
-                <div><span><strong>Peluang Pengembangan Karier</strong><small>68% Kepuasan</small></span><b class="stars">★★★★★ <small>3.9/5</small></b></div>
-              </div>
+            </div>
+
+            <section class="panel employee-attendance" id="attendance">
+              <div class="section-title"><h2>Presensi Karyawan</h2><button class="date-filter" id="attendanceDate">This Month <span>⌄</span></button></div>
+              <div class="attendance-totals"><span><b>82</b> Tepat Waktu</span><span><b>11</b> Terlambat</span><span><b>6</b> Cuti</span><span><b>3</b> Tidak Hadir</span></div>
+              <div class="table-scroll"><table><thead><tr><th>Nama <span>↕</span></th><th>Jabatan <span>↕</span></th><th>Tanggal <span>↕</span></th><th>Jam Masuk <span>↕</span></th><th>Jam Pulang <span>↕</span></th><th>Status <span>↕</span></th></tr></thead><tbody id="employeeRows">
+                <tr><td><span class="employee-cell"><i class="avatar p1">OM</i><span><strong>Olivia Mason</strong><small>EMP-0234</small></span></span></td><td><strong>Marketing</strong><small>Executive Marketing</small></td><td>05 Okt 2026</td><td>08:55 AM</td><td>05:05 PM</td><td><span class="status ontime">On-Time</span></td></tr>
+                <tr><td><span class="employee-cell"><i class="avatar p2">ER</i><span><strong>Ethan Ray</strong><small>EMP-0178</small></span></span></td><td><strong>UI Designer</strong><small>Product Design</small></td><td>05 Okt 2026</td><td>09:14 AM</td><td>05:20 PM</td><td><span class="status late">Late</span></td></tr>
+                <tr><td><span class="employee-cell"><i class="avatar p3">LA</i><span><strong>Lina Armand</strong><small>EMP-0312</small></span></span></td><td><strong>Lab Analyst</strong><small>R&amp;D</small></td><td>05 Okt 2026</td><td>—</td><td>—</td><td><span class="status leave">On Leave</span></td></tr>
+                <tr><td><span class="employee-cell"><i class="avatar p4">JY</i><span><strong>Jacob Yuen</strong><small>EMP-0115</small></span></span></td><td><strong>Site Supervisor</strong><small>Operations</small></td><td>05 Okt 2026</td><td>—</td><td>—</td><td><span class="status absent">Absent</span></td></tr>
+                <tr><td><span class="employee-cell"><i class="avatar p5">MT</i><span><strong>Mia Torres</strong><small>EMP-0289</small></span></span></td><td><strong>HR Officer</strong><small>Human Resources</small></td><td>05 Okt 2026</td><td>08:59 AM</td><td>05:10 PM</td><td><span class="status ontime">On-Time</span></td></tr>
+              </tbody></table></div>
             </section>
           </div>
 
@@ -163,32 +181,19 @@
             </section>
 
             <section class="panel tasks-panel" id="tasks">
-              <div class="section-title"><h2>Daftar Tugas</h2><button class="kebab" aria-label="Task options">···</button></div>
+              <div class="section-title"><h2>Tugas</h2><button class="kebab" aria-label="Task options">···</button></div>
               <label class="task-row"><input type="checkbox" /><span><strong>Complete pre-session survey for Leadership Track</strong><small><i>Employee Development</i><time>28 Oktober 2026</time></small></span></label>
               <label class="task-row"><input type="checkbox" /><span><strong>Join Remote Work Compliance Briefing</strong><small><i>Workplace Engagement</i><time>24 Oktober 2026</time></small></span></label>
               <label class="task-row"><input type="checkbox" checked /><span><strong>Prepare Q4 recruitment planning materials</strong><small><i>Talent Acquisition</i><time>23 Oktober 2026</time></small></span></label>
             </section>
+
+            <section class="panel activities-panel">
+              <div class="section-title"><h2>Aktivitas Terkini</h2><button class="kebab" aria-label="Activity options">···</button></div>
+              <div class="activity-row"><i class="avatar p5">MT</i><p><strong>Mia Torres</strong> menyetujui 2 permintaan cuti<small>05 Okt 2026 - 10:32 AM</small></p></div>
+              <div class="activity-row"><i class="avatar dark-avatar">ER</i><p><strong>Ethan Ray</strong> memperbarui informasi kontak darurat<small>05 Okt 2026 - 09:45 AM</small></p></div>
+              <div class="activity-row"><i class="avatar p2">JY</i><p><strong>Jacob Yuen</strong> otomatis ditandai tidak hadir karena tidak presensi<small>05 Okt 2026 - 09:15 AM</small></p></div>
+            </section>
           </div>
-        </div>
-
-        <div class="dashboard-bottom-grid">
-          <section class="panel employee-attendance" id="attendance">
-            <div class="section-title"><div><h2>Presensi Karyawan</h2><div class="attendance-totals"><span><b>82</b> Tepat Waktu</span><span><b>11</b> Terlambat</span><span><b>6</b> Cuti</span><span><b>3</b> Tidak Hadir</span></div></div><button class="date-filter" id="attendanceDate">This Month <span>⌄</span></button></div>
-            <div class="table-scroll"><table><thead><tr><th>NAMA</th><th>JABATAN</th><th>TANGGAL</th><th>JAM MASUK</th><th>JAM PULANG</th><th>STATUS</th></tr></thead><tbody id="employeeRows">
-              <tr><td><span class="employee-cell"><i class="avatar p1">OM</i><span><strong>Olivia Mason</strong><small>EMP-0234</small></span></span></td><td><strong>Marketing</strong><small>Executive Marketing</small></td><td>05 Okt 2026</td><td>08:55 AM</td><td>05:05 PM</td><td><span class="status ontime">On-Time</span></td></tr>
-              <tr><td><span class="employee-cell"><i class="avatar p2">ER</i><span><strong>Ethan Ray</strong><small>EMP-0178</small></span></span></td><td><strong>UI Designer</strong><small>Product Design</small></td><td>05 Okt 2026</td><td>09:14 AM</td><td>05:20 PM</td><td><span class="status late">Late</span></td></tr>
-              <tr><td><span class="employee-cell"><i class="avatar p3">LA</i><span><strong>Lina Armand</strong><small>EMP-0312</small></span></span></td><td><strong>Lab Analyst</strong><small>R&amp;D</small></td><td>05 Okt 2026</td><td>—</td><td>—</td><td><span class="status leave">On Leave</span></td></tr>
-              <tr><td><span class="employee-cell"><i class="avatar p4">JY</i><span><strong>Jacob Yuen</strong><small>EMP-0115</small></span></span></td><td><strong>Site Supervisor</strong><small>Operations</small></td><td>05 Okt 2026</td><td>—</td><td>—</td><td><span class="status absent">Absent</span></td></tr>
-              <tr><td><span class="employee-cell"><i class="avatar p5">MT</i><span><strong>Mia Torres</strong><small>EMP-0289</small></span></span></td><td><strong>HR Officer</strong><small>Human Resources</small></td><td>05 Okt 2026</td><td>08:59 AM</td><td>05:10 PM</td><td><span class="status ontime">On-Time</span></td></tr>
-            </tbody></table></div>
-          </section>
-
-          <section class="panel activities-panel">
-            <div class="section-title"><h2>Aktivitas Terkini</h2><button class="kebab" aria-label="Activity options">···</button></div>
-            <div class="activity-row"><i class="avatar p5">MT</i><p><strong>Mia Torres</strong> menyetujui 2 permintaan cuti<small>05 Okt 2026 - 10:32 AM</small></p></div>
-            <div class="activity-row"><i class="avatar dark-avatar">ER</i><p><strong>Ethan Ray</strong> memperbarui informasi kontak darurat<small>05 Okt 2026 - 09:45 AM</small></p></div>
-            <div class="activity-row"><i class="avatar p2">JY</i><p><strong>Jacob Yuen</strong> otomatis ditandai tidak hadir karena tidak presensi<small>05 Okt 2026 - 09:15 AM</small></p></div>
-          </section>
         </div>
         <footer class="page-footer"><strong>Copyright © 2026 Kharisma Group</strong><a href="#privacy">Kebijakan Privasi</a><a href="#terms">Syarat &amp; Ketentuan</a><a href="#contact">Kontak</a><span></span><span class="socials"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733-16z"/><path d="M4 20l6.768-6.768m2.464-2.464L20 4"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg></span></footer>
         </div>
@@ -421,8 +426,8 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" charset="UTF-8"></script>
-    <script src="./supabaseClient.js?v=20261022_1830" charset="UTF-8"></script>
-    <script src="./app.js?v=20261022_1830" charset="UTF-8"></script>
-    <script src="./i18n-id.js?v=20261022_1830" charset="UTF-8"></script>
+    <script src="./supabaseClient.js?v=20261022_1900" charset="UTF-8"></script>
+    <script src="./app.js?v=20261022_1900" charset="UTF-8"></script>
+    <script src="./i18n-id.js?v=20261022_1900" charset="UTF-8"></script>
   </body>
 </html>

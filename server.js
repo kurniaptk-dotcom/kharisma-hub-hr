@@ -3,6 +3,26 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
+// Load .env or .env.local if present
+for (const envFile of ['.env', '.env.local', '.env.development.local']) {
+  const envPath = path.join(__dirname, envFile);
+  if (fs.existsSync(envPath)) {
+    try {
+      const content = fs.readFileSync(envPath, 'utf8');
+      content.split(/\r?\n/).forEach(line => {
+        const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+        if (match) {
+          const key = match[1];
+          let value = match[2] || '';
+          if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+          if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+          if (!process.env[key]) process.env[key] = value;
+        }
+      });
+    } catch {}
+  }
+}
+
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '127.0.0.1';
 const PUBLIC_DIR = __dirname;
@@ -105,6 +125,11 @@ function readBody(req) {
   });
 }
 
+const USER_ROLES = new Set(['Admin', 'Supervisor', 'Employee']);
+const USER_STATUSES = new Set(['Pending', 'Active', 'Inactive']);
+const normalizeUserEmail = value => String(value || '').trim().toLowerCase();
+const validUserEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+
 async function handleLocalUserApi(req, res) {
   const projectUrl = process.env.SUPABASE_URL || 'https://wirgqezinegebauddmgy.supabase.co';
   const anonKey = process.env.SUPABASE_ANON_KEY || '';
@@ -127,56 +152,173 @@ async function handleLocalUserApi(req, res) {
     if (profile.role !== 'Admin') return sendJson(res, 403, { error: 'Hanya administrator yang dapat mengelola akun.' });
 
     if (req.method === 'GET') {
-      const response = await serviceFetch('/rest/v1/user_profiles?select=id,email,full_name,role,department,title,status,created_at&order=created_at.asc');
+      const response = await serviceFetch('/rest/v1/user_profiles?select=id,email,full_name,role,department,title,status,employee_id,created_at&order=created_at.asc');
       const data = await response.json();
       return sendJson(res, response.status, response.ok ? { data } : { error: data.message || 'Gagal memuat akun.' });
     }
-    const body = await readBody(req);
+
     if (req.method === 'POST') {
+      const body = await readBody(req);
+      if (body.action === 'resend_invite') {
+        const targetEmail = normalizeUserEmail(body.email);
+        if (!validUserEmail(targetEmail)) return sendJson(res, 400, { error: 'Alamat email tidak valid.' });
+        const appUrl = process.env.APP_URL || 'http://localhost:3000';
+        const resend = await serviceFetch(`/auth/v1/invite?redirect_to=${encodeURIComponent(appUrl)}`, {
+          method: 'POST',
+          body: JSON.stringify({ email: targetEmail })
+        });
+        const resendData = await resend.json();
+        if (!resend.ok) return sendJson(res, resend.status || 502, { error: resendData.msg || resendData.message || 'Gagal mengirim ulang undangan.' });
+        return sendJson(res, 200, { success: true, message: `Tautan undangan telah dikirim ulang ke ${targetEmail}.` });
+      }
+
+      if (body.action === 'reset_password') {
+        const targetEmail = normalizeUserEmail(body.email);
+        if (!validUserEmail(targetEmail)) return sendJson(res, 400, { error: 'Alamat email tidak valid.' });
+        const appUrl = process.env.APP_URL || 'http://localhost:3000';
+        const reset = await serviceFetch(`/auth/v1/recover?redirect_to=${encodeURIComponent(appUrl)}`, {
+          method: 'POST',
+          body: JSON.stringify({ email: targetEmail })
+        });
+        const resetData = await reset.json();
+        if (!reset.ok) return sendJson(res, reset.status || 502, { error: resetData.msg || resetData.message || 'Gagal mengirim email reset kata sandi.' });
+        return sendJson(res, 200, { success: true, message: `Email pemulihan kata sandi telah dikirim ke ${targetEmail}.` });
+      }
+
       const name = String(body.name || '').trim();
-      const email = String(body.email || '').trim().toLowerCase();
-      if (!name || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || !['Admin', 'Supervisor'].includes(body.role)) return sendJson(res, 400, { error: 'Nama, email valid, dan role wajib diisi.' });
-      const invited = await serviceFetch('/auth/v1/invite', { method: 'POST', body: JSON.stringify({ email, data: { full_name: name } }) });
+      const email = normalizeUserEmail(body.email);
+      const role = String(body.role || 'Employee');
+      const department = String(body.department || '').trim();
+      const title = String(body.title || '').trim();
+      if (!name || !validUserEmail(email)) return sendJson(res, 400, { error: 'Nama dan alamat email yang valid wajib diisi.' });
+      if (!USER_ROLES.has(role)) return sendJson(res, 400, { error: 'Peran akun tidak valid.' });
+      if (role === 'Supervisor' && !department) return sendJson(res, 400, { error: 'Pilih departemen untuk akun atasan.' });
+
+      const empRes = await serviceFetch(`/rest/v1/employees?select=id,name,email,department,title&id=not.is.null&email=ilike.${encodeURIComponent(email)}`);
+      const empData = await empRes.json();
+      const employee = Array.isArray(empData) ? empData.find(row => normalizeUserEmail(row.email) === email) : null;
+      if (role === 'Employee' && !employee) return sendJson(res, 409, { error: 'Email harus cocok dengan data karyawan yang sudah terdaftar.' });
+
+      const appUrl = process.env.APP_URL || 'http://localhost:3000';
+      const invited = await serviceFetch(`/auth/v1/invite?redirect_to=${encodeURIComponent(appUrl)}`, {
+        method: 'POST',
+        body: JSON.stringify({ email, data: { full_name: name } })
+      });
       const authUser = await invited.json();
-      if (!invited.ok || !authUser.id) return sendJson(res, invited.status || 502, { error: authUser.message || authUser.msg || 'Undangan gagal dikirim.' });
-      const saved = await serviceFetch('/rest/v1/user_profiles?on_conflict=id', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=representation' }, body: JSON.stringify({ id: authUser.id, email, full_name: name, role: body.role, department: body.department || '', title: body.title || body.role, status: 'Active' }) });
-      const data = await saved.json();
-      return sendJson(res, saved.ok ? 201 : saved.status, saved.ok ? { data: data[0] } : { error: data.message || 'Profil akun gagal dibuat.' });
+      if (!invited.ok || !authUser.id) {
+        const errMsg = authUser.msg || authUser.message || '';
+        if (/already\s+been\s+registered/i.test(errMsg) || invited.status === 422) {
+          return sendJson(res, 409, { error: `Pengguna dengan email ${email} sudah terdaftar di Supabase Auth.` });
+        }
+        return sendJson(res, invited.status || 502, { error: errMsg || 'Undangan gagal dikirim.' });
+      }
+
+      const userProfile = {
+        id: authUser.id,
+        email,
+        full_name: name,
+        role,
+        department: role === 'Employee' ? (employee?.department || department) : (department || employee?.department || ''),
+        title: title || employee?.title || (role === 'Admin' ? 'Administrator SDM' : role === 'Supervisor' ? 'Atasan' : 'Karyawan'),
+        employee_id: employee?.id || null,
+        status: 'Pending'
+      };
+      const saved = await serviceFetch('/rest/v1/user_profiles?on_conflict=id', {
+        method: 'POST',
+        headers: { Prefer: 'resolution=merge-duplicates,return=representation' },
+        body: JSON.stringify(userProfile)
+      });
+      const savedData = await saved.json();
+      if (!saved.ok) {
+        await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(authUser.id)}`, { method: 'DELETE' });
+        return sendJson(res, saved.status || 502, { error: savedData.message || 'Profil akun gagal dibuat.' });
+      }
+      return sendJson(res, 201, { data: savedData[0] || userProfile });
     }
+
     if (req.method === 'PATCH') {
+      const body = await readBody(req);
       const id = String(body.id || '');
       if (!id) return sendJson(res, 400, { error: 'ID akun wajib diisi.' });
-      if (id === user.id && (body.role !== 'Admin' || body.status === 'Inactive')) return sendJson(res, 400, { error: 'Anda tidak dapat menurunkan role atau menonaktifkan akun sendiri.' });
-      if (body.role && !['Admin', 'Supervisor'].includes(body.role)) return sendJson(res, 400, { error: 'Role tidak valid.' });
-      if (body.role === 'Supervisor' || body.status === 'Inactive') {
-        const targetResponse = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}&select=role,status`);
-        const [target] = await targetResponse.json();
-        if (target?.role === 'Admin' && target.status === 'Active') {
-          const adminsResponse = await serviceFetch('/rest/v1/user_profiles?select=id&role=eq.Admin&status=eq.Active');
-          const admins = await adminsResponse.json();
-          if (adminsResponse.ok && admins.length <= 1) return sendJson(res, 409, { error: 'Sistem harus memiliki setidaknya satu administrator aktif.' });
+      if (id === user.id && ((body.role !== undefined && body.role !== 'Admin') || body.status === 'Inactive' || body.status === 'Pending')) {
+        return sendJson(res, 400, { error: 'Anda tidak dapat menurunkan peran atau menonaktifkan akun sendiri.' });
+      }
+      if (body.role !== undefined && !USER_ROLES.has(body.role)) return sendJson(res, 400, { error: 'Peran akun tidak valid.' });
+      if (body.status !== undefined && !USER_STATUSES.has(body.status)) return sendJson(res, 400, { error: 'Status akun tidak valid.' });
+
+      const currentResponse = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}&select=id,role,status,email,employee_id,department`);
+      const currentList = await currentResponse.json();
+      const current = currentList?.[0];
+      if (!currentResponse.ok || !current) return sendJson(res, currentResponse.status || 404, { error: currentList?.message || 'Akun tidak ditemukan.' });
+
+      const nextRole = body.role ?? current.role;
+      const nextStatus = body.status ?? current.status;
+      if (current.role === 'Admin' && current.status === 'Active' && (nextRole !== 'Admin' || nextStatus !== 'Active')) {
+        const adminsRes = await serviceFetch('/rest/v1/user_profiles?select=id&role=eq.Admin&status=eq.Active');
+        const admins = await adminsRes.json();
+        if (adminsRes.ok && admins.length <= 1) return sendJson(res, 409, { error: 'Sistem harus memiliki setidaknya satu administrator aktif.' });
+      }
+
+      const fields = { role: nextRole, status: nextStatus, updated_at: new Date().toISOString() };
+      if (body.name !== undefined) fields.full_name = String(body.name).trim();
+      if (body.email !== undefined) fields.email = normalizeUserEmail(body.email);
+      if (body.department !== undefined) fields.department = String(body.department).trim();
+      if (body.title !== undefined) fields.title = String(body.title).trim();
+      if (body.employee_id !== undefined) fields.employee_id = body.employee_id || null;
+
+      if (body.email !== undefined || body.name !== undefined) {
+        const authUpdate = {};
+        if (body.email !== undefined) {
+          if (!validUserEmail(fields.email)) return sendJson(res, 400, { error: 'Alamat email tidak valid.' });
+          authUpdate.email = fields.email;
+          authUpdate.email_confirm = true;
+        }
+        if (body.name !== undefined) authUpdate.user_metadata = { full_name: fields.full_name };
+        const identity = await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(authUpdate) });
+        if (!identity.ok) {
+          const errData = await identity.json();
+          return sendJson(res, identity.status, { error: errData.message || 'Identitas login gagal diperbarui.' });
         }
       }
-      const authUpdate = {};
-      if (body.email !== undefined) { authUpdate.email = String(body.email).trim().toLowerCase(); authUpdate.email_confirm = true; }
-      if (body.name !== undefined) authUpdate.user_metadata = { full_name: String(body.name).trim() };
-      if (Object.keys(authUpdate).length) {
-        const identity = await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(authUpdate) });
-        if (!identity.ok) { const error = await identity.json(); return sendJson(res, identity.status, { error: error.message || 'Identitas login gagal diperbarui.' }); }
-      }
-      const fields = {};
-      if (body.name !== undefined) fields.full_name = String(body.name).trim();
-      if (body.email !== undefined) fields.email = String(body.email).trim().toLowerCase();
-      for (const key of ['role', 'department', 'title', 'status']) if (body[key] !== undefined) fields[key] = body[key];
+
       const updated = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(fields) });
       const data = await updated.json();
       if (!updated.ok) return sendJson(res, updated.status, { error: data.message || 'Pembaruan akun gagal.' });
-      if (body.status) {
-        const ban = await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ban_duration: body.status === 'Inactive' ? '876000h' : 'none' }) });
-        if (!ban.ok) return sendJson(res, ban.status, { error: 'Profil berubah, tetapi status login gagal diperbarui.' });
+      if (nextStatus === 'Inactive') {
+        await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ban_duration: '876000h' }) });
+      } else if (nextStatus === 'Active') {
+        await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify({ ban_duration: 'none' }) });
       }
       return sendJson(res, 200, { data: data[0] || null });
     }
+
+    if (req.method === 'DELETE') {
+      const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+      let id = parsedUrl.searchParams.get('id');
+      if (!id) {
+        const body = await readBody(req);
+        id = body.id;
+      }
+      if (!id) return sendJson(res, 400, { error: 'ID akun wajib disertakan.' });
+      if (id === user.id) return sendJson(res, 400, { error: 'Anda tidak dapat menghapus akun Anda sendiri.' });
+
+      const adminsRes = await serviceFetch('/rest/v1/user_profiles?select=id&role=eq.Admin&status=eq.Active');
+      const admins = await adminsRes.json();
+      const targetRes = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}&select=role,status`);
+      const targetList = await targetRes.json();
+      if (targetList?.[0]?.role === 'Admin' && targetList[0].status === 'Active' && adminsRes.ok && admins.length <= 1) {
+        return sendJson(res, 409, { error: 'Sistem harus memiliki setidaknya satu administrator aktif.' });
+      }
+
+      const authDel = await serviceFetch(`/auth/v1/admin/users/${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!authDel.ok && authDel.status !== 404) {
+        const err = await authDel.json();
+        return sendJson(res, authDel.status || 502, { error: err.message || 'Gagal menghapus pengguna dari autentikasi.' });
+      }
+      await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+      return sendJson(res, 200, { success: true, message: 'Akun berhasil dihapus permanen.' });
+    }
+
     return sendJson(res, 405, { error: 'Method Not Allowed' });
   } catch {
     return sendJson(res, 503, { error: 'Layanan Supabase tidak dapat dijangkau.' });
@@ -215,6 +357,20 @@ const server = http.createServer(async (req, res) => {
   // ==========================================================================
   if (pathname.startsWith('/api/')) {
     const db = readDb();
+
+    if (pathname === '/api/config') {
+      const supabaseUrl = process.env.SUPABASE_URL || 'https://wirgqezinegebauddmgy.supabase.co';
+      const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || '';
+      const serviceKeyConfigured = Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY);
+      return sendJson(res, 200, {
+        supabaseUrl,
+        supabaseAnonKey,
+        authRequired: true,
+        configured: Boolean(supabaseAnonKey),
+        backendConfigured: Boolean(supabaseAnonKey) && serviceKeyConfigured,
+        missingConfiguration: [!supabaseAnonKey && 'SUPABASE_ANON_KEY', !serviceKeyConfigured && 'SUPABASE_SERVICE_ROLE_KEY'].filter(Boolean)
+      });
+    }
 
     if (pathname === '/api/users') return handleLocalUserApi(req, res);
 

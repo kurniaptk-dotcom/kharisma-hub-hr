@@ -17,16 +17,18 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const body = req.body || {};
+    if (!auth.profile.employee_id) return res.status(409).json({ error: 'Akun belum tertaut ke data karyawan.' });
     const newLeave = {
       id: body.id || `lv-${Date.now().toString().slice(-4)}`,
-      employee_name: body.name || 'Pegawai',
-      title: body.title || 'Staff',
+      employee_id: auth.profile.employee_id,
+      employee_name: auth.profile.full_name || 'Pegawai',
+      title: auth.profile.title || 'Karyawan',
       type: body.type || 'Annual Leave',
       submit_date: body.submitDate || new Date().toLocaleDateString('id-ID'),
       period: body.period || '1 Hari',
       duration: body.duration || '1 Day',
       reason: body.reason || 'Keperluan keluarga',
-      status: body.status || 'Pending'
+      status: 'Pending'
     };
 
     const sb = await querySupabase('leave_requests', {
@@ -42,7 +44,8 @@ export default async function handler(req, res) {
 
   if (req.method === 'PATCH') {
     const { id, status } = req.body || {};
-    if (!id || !status) return res.status(400).json({ error: 'id and status required' });
+    if (!id || !['Approved', 'Rejected'].includes(status)) return res.status(400).json({ error: 'ID permohonan dan keputusan yang valid wajib diisi.' });
+    if (!['Admin', 'Supervisor'].includes(auth.profile.role)) return res.status(403).json({ error: 'Hanya atasan atau admin yang dapat meninjau permohonan cuti.' });
 
     const sb = await querySupabase(`leave_requests?id=eq.${encodeURIComponent(id)}`, {
       method: 'PATCH',

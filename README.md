@@ -1,58 +1,61 @@
-# Kharisma Hub — Sistem Manajemen SDM & HR Enterprise
+# KharismaHub  -  Sistem Manajemen SDM
 
-Kharisma Hub adalah aplikasi manajemen Sumber Daya Manusia (SDM) komprehensif berbasis web dengan desain antarmuka modern, bersih, dan berstandar SaaS enterprise.
-
-## Fitur Utama
-
-- **Dasbor Eksekutif:** Metrik karyawan, grafik kehadiran, tinjauan kepuasan kerja, status kepegawaian, daftar tugas, dan aktivitas terbaru.
-- **Direktori Karyawan:** Manajemen data karyawan dengan mode tampilan tabel dan grid, form tambah & edit karyawan, serta profil detail.
-- **Kalender Kerja & Agenda:** Penjadwalan agenda rekrutmen, orientasi, pelatihan, dan evaluasi dengan sistem filter kategori.
-- **Presensi & Kehadiran:** Pelacakan jam masuk/pulang (Clock In/Out), status keterlambatan, cuti, absensi, serta rekapitulasi kehadiran bulanan.
-- **KPI & Target:** Indikator kinerja utama, capaian departemen, evaluasi target (*Exceeded*, *On Track*, *At Risk*), dan manajemen hak akses admin/supervisor.
-- **Manajemen Penggajian (Payroll):** Rekapitulasi gaji pokok, tunjangan, lembur, potongan, dan cetak slip gaji resmi (*Payslip*).
-- **Pengajuan Cuti (Leave Management):** Pengajuan cuti terstruktur beserta alur persetujuan (*Approved / Pending / Rejected*).
-- **Kotak Masuk (Inbox):** Manajemen komunikasi internal dengan fitur folder, label, pencarian, dan composer pesan.
-- **Koneksi Supabase Cloud:** Terintegrasi dengan Supabase Auth dan database untuk data SDM.
-
-## Integrasi Supabase
-
-- **Project URL:** `https://wirgqezinegebauddmgy.supabase.co`
-- Masukkan *Supabase Anon Key* melalui menu **Pengaturan** di dalam aplikasi untuk mengaktifkan sinkronisasi database.
+KharismaHub adalah aplikasi HR berbasis web untuk mengelola data karyawan, kalender, kehadiran, KPI, cuti, dan penggajian. Aplikasi memakai Supabase Auth untuk sesi login serta Supabase Postgres dengan Row Level Security (RLS) untuk membatasi akses data.
 
 ## Menjalankan Secara Lokal
 
 ```bash
-# Menjalankan server lokal
 npm start
-# Buka http://localhost:3000 di browser
+# Buka http://localhost:3000
 ```
 
-`server.js` adalah backend demo berbasis berkas lokal dan hanya bind ke `127.0.0.1`. Endpoint `/api/*` menolak akses dari origin lain. Jangan mengekspos server demo ini ke internet; deployment cloud harus memakai fungsi serverless di folder `api/` dengan environment Supabase yang sudah dikonfigurasi.
+`server.js` menyediakan backend lokal/demo. Alur autentikasi Supabase lengkap (undangan, aktivasi, dan pengelolaan akun) berjalan pada fungsi serverless di folder `api/`; gunakan deployment Vercel untuk alur tersebut. Jangan mengekspos backend lokal ke internet.
 
-## Lisensi
+## Setup Supabase
 
-Hak Cipta © 2026 PT Kharisma Group Indonesia. All rights reserved.
+Jalankan SQL Editor Supabase dalam urutan berikut:
 
-# Penyiapan Login Supabase
+1. `supabase/schema.sql`
+2. `supabase/auth-hardening.sql`
+3. `supabase/attendance-optimization.sql`
+4. `supabase/login-auth-v2.sql`
 
-Login memakai proyek Supabase yang sudah dikonfigurasi di `supabaseClient.js`.
+Migrasi terakhir memperluas peran menjadi `Admin`, `Supervisor` (label UI: Atasan), dan `Employee` (Karyawan); status akun menjadi `Pending`, `Active`, atau `Inactive`; menautkan profil ke data karyawan; serta memasang kebijakan RLS berbasis peran dan departemen. Penulisan presensi wajib melalui RPC transisi agar waktu, lokasi, dan persetujuan tidak dapat dipalsukan lewat REST langsung.
 
-1. Jalankan `supabase/schema.sql`, lalu `supabase/auth-hardening.sql`, kemudian `supabase/attendance-optimization.sql` di SQL Editor proyek tersebut. Migration terakhir menambahkan shift, geofence, sesi istirahat, koreksi, dan persetujuan lembur.
-2. Salin **anon/public key** Supabase ke Pengaturan aplikasi. Key ini boleh digunakan di browser; jangan masukkan service-role key di aplikasi.
-3. Buat pengguna pertama melalui Supabase Dashboard → Authentication → Users. Setelah akun dibuat, promosikan sebagai administrator di SQL Editor:
+Di Supabase Authentication:
 
-   ```sql
-   update public.user_profiles
-   set role = 'Admin', department = 'Human Resources', title = 'Administrator SDM'
-   where email = 'email-admin-anda@example.com';
-   ```
+- Nonaktifkan pendaftaran publik (*public sign-up*). Akun karyawan dibuat melalui undangan admin.
+- Tambahkan URL produksi `https://kharismahub.vercel.app/**` dan URL lokal `http://localhost:3000/**` ke daftar Redirect URLs.
+- Siapkan SMTP agar undangan dan tautan pemulihan kata sandi dapat terkirim.
+- Akun undangan berstatus `Pending` sampai pengguna membuka undangan, membuat kata sandi, lalu profil lolos validasi tautan karyawan/departemen.
 
-4. Atur environment server `SUPABASE_ANON_KEY` dan `SUPABASE_SERVICE_ROLE_KEY`. Service-role key hanya dipakai API server untuk memvalidasi role admin dan mengundang atau mengelola akun; jangan pernah dipasang sebagai key browser.
-5. Tambahkan origin aplikasi (lokal dan produksi) ke Authentication → URL Configuration → Redirect URLs. Atur SMTP email untuk undangan dan reset kata sandi sebelum dipakai pengguna.
-6. Nonaktifkan public sign-up di Authentication → Settings agar akun hanya dibuat melalui undangan administrator. Login dengan administrator pertama. Undangan pengguna berikutnya tersedia di KPI → Manajemen Pengguna. Pengguna baru menerima tautan untuk mengatur kata sandi sendiri.
+Buat pengguna admin pertama melalui Supabase Dashboard  >  Authentication  >  Users. Setelah profil terbentuk, aktifkan dan promosikan akun itu dari SQL Editor:
 
-Setelah migration absensi dijalankan, buka menu **Kehadiran** sebagai admin untuk mengatur koordinat dan radius kantor, membuat shift, lalu menetapkan shift kepada karyawan. Akun karyawan harus ditautkan ke `user_profiles.employee_id`; supervisor dapat menetapkan shift kepada karyawan dalam departemennya. Izin GPS diperlukan, dan browser harus berjalan pada HTTPS atau `localhost`.
+```sql
+update public.user_profiles
+set role = 'Admin', status = 'Active', department = 'Human Resources', title = 'Administrator SDM'
+where lower(email) = lower('email-admin-anda@example.com');
+```
 
-Jika anon key belum dikonfigurasi, aplikasi tetap terbuka dalam **mode demo lokal** dan tidak meminta login cloud. Mode ini hanya memakai simulasi akun lokal. Login Supabase mewajibkan sesi aktif dan profil dengan status `Active`.
+Akun admin pertama harus memiliki kata sandi yang ditetapkan melalui Supabase Dashboard atau tautan pemulihan kata sandi. Undangan akun berikutnya tersedia pada menu Manajemen Pengguna.
 
-  Data karyawan dan KPI disimpan ke cloud saat administrator mengubahnya; data presensi disimpan saat pengguna mencatat masuk atau pulang. Supervisor hanya dapat menyimpan KPI divisinya dan presensinya sendiri. Sinkronisasi massal dari Pengaturan hanya memproses data karyawan, KPI sesuai divisi/role, dan presensi pengguna yang sedang login. Login tidak mengirim data. Cuti dan kalender tidak termasuk sinkronisasi cloud.
+## Environment Vercel
+
+Pada Vercel  >  Project Settings  >  Environment Variables, isi untuk Production, Preview, dan Development sesuai kebutuhan:
+
+- `SUPABASE_URL`  -  URL proyek Supabase.
+- `SUPABASE_ANON_KEY`  -  anon/public key; endpoint `/api/config` mengirim key ini ke browser.
+- `SUPABASE_SERVICE_ROLE_KEY`  -  service-role key, hanya untuk fungsi server. Tandai sebagai rahasia dan jangan gunakan nama variabel `NEXT_PUBLIC_*`.
+
+`/api/config` hanya mengirim URL, anon key, dan status konfigurasi. Service-role key tidak pernah dikirim ke browser. Jika variabel server belum lengkap, aplikasi sengaja tetap terkunci pada halaman login dan menampilkan konfigurasi yang perlu dilengkapi; aplikasi tidak membuka data demo sebagai pengganti sesi produksi.
+
+## Peran dan Akses
+
+- **Admin:** mengelola seluruh data dan akun.
+- **Atasan / Supervisor:** mengakses karyawan dan proses persetujuan di departemennya.
+- **Karyawan / Employee:** mengakses profil dan aktivitas miliknya sendiri.
+
+Peran, status, dan tautan `employee_id` hanya dapat diubah melalui tindakan admin. Setiap data karyawan harus memiliki email unik agar undangan Employee dapat ditautkan dengan benar. Jangan menghapus tabel atau menonaktifkan RLS setelah migrasi.
+
+Setelah migrasi absensi, admin mengatur koordinat dan radius kantor melalui menu Kehadiran. Atasan dapat menetapkan shift bagi karyawan di departemennya. Presensi memerlukan izin GPS dan browser HTTPS (atau localhost).
+\n

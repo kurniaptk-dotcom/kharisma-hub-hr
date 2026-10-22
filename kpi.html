@@ -200,24 +200,33 @@
     <dialog class="record-dialog" id="userAccountDialog">
       <form id="userAccountForm">
         <div class="module-dialog-head">
-          <div><span class="module-eyebrow">MANAJEMEN PENGGUNA</span><h2>Tambah Akun Pengguna Baru</h2></div>
+          <div><span class="module-eyebrow">MANAJEMEN PENGGUNA</span><h2>Tambah &amp; Undang Akun Pengguna</h2></div>
           <button type="button" class="dialog-close" data-close-user-dialog aria-label="Close">&times;</button>
         </div>
         <div class="dialog-two">
-          <label>Nama Lengkap<input name="name" required placeholder="mis. Sari Dewi" /></label>
-          <label>Email Kantor<input name="email" type="email" required placeholder="nama@kharismahub.com" /></label>
-        </div>
-        <div class="dialog-two">
-          <label>Role / Peran<select name="role">
+          <label>Pilih Dari Karyawan Terdaftar (Opsional)
+            <select id="userAcctEmployeeSelect">
+              <option value="">-- Pilih karyawan atau isi manual --</option>
+            </select>
+          </label>
+          <label>Role / Peran<select name="role" id="userAcctRole">
+            <option value="Employee">Karyawan</option>
             <option value="Supervisor">Supervisor Divisi</option>
             <option value="Admin">Administrator</option>
           </select></label>
-          <label>Departemen yang Dikelola<select name="department" id="userAcctDept" required></select></label>
         </div>
-        <label>Jabatan<input name="title" placeholder="mis. Marketing Team Lead" /></label>
+        <div class="dialog-two">
+          <label>Nama Lengkap<input name="name" id="userAcctName" required placeholder="mis. Sari Dewi" /></label>
+          <label>Email Kantor<input name="email" id="userAcctEmail" type="email" required placeholder="nama@kharismahub.com" /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Departemen<select name="department" id="userAcctDept" required></select></label>
+          <label>Jabatan<input name="title" id="userAcctTitle" placeholder="mis. Marketing Team Lead" /></label>
+        </div>
+        <p style="font-size:12px;color:#64748b;margin:4px 0 12px">Undangan login dan tautan pembuatan kata sandi akan dikirim ke alamat email di atas via Supabase Auth.</p>
         <div class="dialog-actions">
           <button type="button" class="module-button secondary" data-close-user-dialog>Batal</button>
-          <button type="submit" class="module-button primary">Tambah Akun</button>
+          <button type="submit" class="module-button primary">Kirim Undangan Akun</button>
         </div>
       </form>
     </dialog>
@@ -236,6 +245,7 @@
         </div>
         <div class="dialog-two">
           <label>Role / Peran<select name="role" id="editUserAcctRole">
+            <option value="Employee">Karyawan</option>
             <option value="Supervisor">Supervisor Divisi</option>
             <option value="Admin">Administrator</option>
           </select></label>
@@ -245,7 +255,8 @@
           <label>Jabatan<input name="title" id="editUserAcctTitle" /></label>
           <label>Status Akun<select name="status" id="editUserAcctStatus">
             <option value="Active">Aktif</option>
-            <option value="Inactive">Nonaktif</option>
+            <option value="Pending">Menunggu Aktivasi</option>
+            <option value="Inactive">Nonaktif (Diblokir)</option>
           </select></label>
         </div>
         <div class="dialog-actions">

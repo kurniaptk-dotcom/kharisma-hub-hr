@@ -13,7 +13,8 @@
 (function (window) {
   'use strict';
 
-  const SUPABASE_URL = 'https://wirgqezinegebauddmgy.supabase.co';
+  const DEFAULT_SUPABASE_URL = 'https://wirgqezinegebauddmgy.supabase.co';
+  let SUPABASE_URL = DEFAULT_SUPABASE_URL;
   const STORAGE_KEY_ANON = 'kharisma_supabase_anon_key';
   const STORAGE_KEY_QUEUE = 'kharisma_offline_sync_queue';
 
@@ -26,6 +27,10 @@
   let client = null;
   let isConnected = false;
   let lastSyncTime = null;
+  let authRequired = false;
+  let configurationError = '';
+  let backendConfigured = true;
+  let configReady = Promise.resolve(null);
 
   function initClient() {
     if (typeof supabase !== 'undefined' && SUPABASE_URL && anonKey) {
@@ -133,6 +138,10 @@
   // ==========================================================================
 
   const KharismaDB = {
+    get ready() { return configReady; },
+    get authRequired() { return authRequired; },
+    get backendConfigured() { return backendConfigured; },
+    get configurationError() { return configurationError; },
     get url() { return SUPABASE_URL; },
     get isConnected() { return isConnected; },
     get lastSyncTime() { return lastSyncTime; },
@@ -140,6 +149,7 @@
 
     auth: {
       get enabled() { return !!client && !!anonKey; },
+      get required() { return authRequired; },
       async getSession() {
         if (!client) return { session: null, error: new Error('Supabase belum dikonfigurasi') };
         const { data, error } = await client.auth.getSession();
@@ -183,10 +193,10 @@
     // --- EMPLOYEES SERVICE ---
     employees: {
       async getAll(fallbackData = []) {
-        if (!client || !isConnected) return fallbackData;
+        if (!client || !isConnected) return authRequired ? [] : fallbackData;
         try {
           const { data, error } = await client.from('employees').select('*').order('created_at', { ascending: true });
-          if (!error && data && data.length) {
+          if (!error && data) {
             window.__kharismaEmployeeProfiles = Object.fromEntries(data.map(e => [e.name, {
               gender: e.gender, birthDate: e.birth_date, phone: e.phone, address: e.address,
               joinDate: e.join_date, workModel: e.work_model, employmentType: e.employment_type
@@ -203,7 +213,7 @@
         } catch (e) {
           console.warn('[KharismaDB] Fallback to local employees:', e.message);
         }
-        return fallbackData;
+        return authRequired ? [] : fallbackData;
       },
 
       async save(employeeObj) {
@@ -353,10 +363,10 @@
     // --- LEAVE SERVICE ---
     leave: {
       async getAll(fallbackData = []) {
-        if (!client || !isConnected) return fallbackData;
+        if (!client || !isConnected) return authRequired ? [] : fallbackData;
         try {
           const { data, error } = await client.from('leave_requests').select('*').order('created_at', { ascending: false });
-          if (!error && data && data.length) {
+          if (!error && data) {
             return data.map(r => ({
               id: r.id,
               name: r.employee_name,
@@ -370,7 +380,7 @@
             }));
           }
         } catch (e) {}
-        return fallbackData;
+        return authRequired ? [] : fallbackData;
       },
 
       async submit(request) {
@@ -388,9 +398,21 @@
 
         if (client && isConnected) {
           try {
-            await client.from('leave_requests').upsert(payload);
-          } catch (e) {}
+            const { data: authData } = await client.auth.getSession();
+            const userId = authData?.session?.user?.id;
+            if (!userId) return { ok: false, error: 'Sesi login tidak ditemukan.' };
+            const { data: profile, error: profileError } = await client.from('user_profiles').select('employee_id,full_name,title').eq('id', userId).single();
+            if (profileError || !profile?.employee_id) return { ok: false, error: 'Akun belum tertaut ke data karyawan.' };
+            payload.employee_id = profile.employee_id;
+            payload.employee_name = profile.full_name || request.name;
+            payload.title = profile.title || request.title;
+            payload.status = 'Pending';
+            const { data, error } = await client.from('leave_requests').insert(payload).select().single();
+            if (error) return { ok: false, error: error.message };
+            return { ok: true, data };
+          } catch (e) { return { ok: false, error: e.message }; }
         }
+        if (authRequired) return { ok: false, error: 'Koneksi cloud belum tersedia. Permohonan tidak disimpan.' };
         enqueueSync('insert', 'leave_requests', payload);
         return { ok: true, data: payload };
       },
@@ -409,10 +431,10 @@
     // --- KPI SERVICE ---
     kpi: {
       async getAll(fallbackData = []) {
-        if (!client || !isConnected) return fallbackData;
+        if (!client || !isConnected) return authRequired ? [] : fallbackData;
         try {
           const { data, error } = await client.from('kpi_indicators').select('*').order('created_at', { ascending: true });
-          if (!error && data && data.length) {
+          if (!error && data) {
             return data.map(k => ({
               id: k.id,
               title: k.title,
@@ -429,7 +451,7 @@
             }));
           }
         } catch (e) {}
-        return fallbackData;
+        return authRequired ? [] : fallbackData;
       },
 
       async save(kpi) {
@@ -451,6 +473,8 @@
 
         if (client && isConnected) {
           try {
+            const { data: employee } = await client.from('employees').select('id').eq('name', kpi.pic).maybeSingle();
+            if (employee?.id) payload.employee_id = employee.id;
             const { error } = await client.from('kpi_indicators').upsert(payload);
             if (error) throw error;
             return { ok: true, data: payload };
@@ -458,6 +482,7 @@
             return { ok: false, error: e.message };
           }
         }
+        if (authRequired) return { ok: false, error: 'Koneksi cloud belum tersedia. Perubahan KPI tidak disimpan.' };
         enqueueSync('insert', 'kpi_indicators', payload);
         return { ok: true, offline: true, data: payload };
       },
@@ -480,10 +505,10 @@
     // --- CALENDAR EVENTS SERVICE ---
     calendar: {
       async getAll(fallbackData = []) {
-        if (!client || !isConnected) return fallbackData;
+        if (!client || !isConnected) return authRequired ? [] : fallbackData;
         try {
           const { data, error } = await client.from('calendar_events').select('*').order('day', { ascending: true });
-          if (!error && data && data.length) {
+          if (!error && data) {
             return data.map(ev => ({
               id: ev.id,
               day: Number(ev.day),
@@ -497,7 +522,7 @@
             }));
           }
         } catch (e) {}
-        return fallbackData;
+        return authRequired ? [] : fallbackData;
       },
 
       async create(ev) {
@@ -595,7 +620,7 @@
   if (typeof window !== 'undefined') {
     window.KharismaDB = KharismaDB;
     window.KharismaSupabase = {
-      url: SUPABASE_URL,
+      get url() { return SUPABASE_URL; },
       get client() { return client; },
       init: initClient,
       setKey: KharismaDB.setKey,
@@ -618,9 +643,35 @@
       }
     };
 
-    window.addEventListener('DOMContentLoaded', () => {
+    configReady = (async () => {
+      try {
+        const response = await fetch('/api/config', { headers: { Accept: 'application/json' }, cache: 'no-store' });
+        if (response.ok) {
+          const config = await response.json();
+          authRequired = config.authRequired === true;
+          backendConfigured = config.backendConfigured !== false;
+          if (typeof config.supabaseUrl === 'string' && /^https:\/\//i.test(config.supabaseUrl)) SUPABASE_URL = config.supabaseUrl.replace(/\/$/, '');
+          if (typeof config.supabaseAnonKey === 'string' && config.supabaseAnonKey.trim()) anonKey = config.supabaseAnonKey.trim();
+          if (!anonKey && !authRequired) anonKey = localStorage.getItem(STORAGE_KEY_ANON) || '';
+          if (authRequired && !anonKey) configurationError = 'Login belum dapat digunakan karena SUPABASE_ANON_KEY belum dikonfigurasi di server.';
+          else if (authRequired && !backendConfigured) configurationError = `Backend belum siap. Konfigurasikan di Vercel: ${(config.missingConfiguration || ['SUPABASE_SERVICE_ROLE_KEY']).join(', ')}.`;
+        } else if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1' && !location.protocol.startsWith('file:')) {
+          authRequired = true;
+          configurationError = 'Konfigurasi autentikasi tidak dapat dimuat. Muat ulang halaman atau hubungi administrator.';
+        } else {
+          anonKey = localStorage.getItem(STORAGE_KEY_ANON) || anonKey;
+        }
+      } catch {
+        if (location.hostname !== 'localhost' && location.hostname !== '127.0.0.1' && !location.protocol.startsWith('file:')) {
+          authRequired = true;
+          configurationError = 'Konfigurasi autentikasi tidak dapat dimuat. Periksa koneksi lalu coba lagi.';
+        } else {
+          anonKey = localStorage.getItem(STORAGE_KEY_ANON) || anonKey;
+        }
+      }
       initClient();
-    });
+      return { authRequired, configured: Boolean(anonKey), backendConfigured, error: configurationError };
+    })();
   }
 
   if (typeof module !== 'undefined' && module.exports) {

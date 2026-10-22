@@ -17,11 +17,14 @@ export default async function handler(req, res) {
 
   if (req.method === 'POST') {
     const body = req.body || {};
+    const pic = String(body.pic || auth.profile.full_name || '').trim();
+    const employeeLookup = pic ? await querySupabase(`employees?select=id,name&name=ilike.${encodeURIComponent(pic)}`, { accessToken: auth.token }) : { ok: false };
     const newKpi = {
       id: body.id || `kpi-${Date.now().toString().slice(-4)}`,
       title: body.title,
       dept: body.dept || 'Operations',
-      pic: body.pic || 'Davis Levin',
+      pic,
+      employee_id: employeeLookup.ok ? (employeeLookup.data?.[0]?.id || null) : null,
       target: Number(body.target || 100),
       actual: Number(body.actual || 0),
       unit: body.unit || '%',

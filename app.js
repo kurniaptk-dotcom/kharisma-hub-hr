@@ -1,4 +1,5 @@
 // Kharisma Hub HR Management - Core Application Script
+document.querySelector('.app-shell')?.setAttribute('data-auth-pending', '');
 let toastTimer;
 
 function showToast(message) {
@@ -50,36 +51,104 @@ function refreshKpiStatus(kpi) {
 
 const initials = (name) => String(name || '').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
-// Supabase Auth gate: demo mode remains available only when no project key is configured.
+// Cloud sessions are the source of truth whenever authentication is required.
 let authenticatedSupabaseSession = null;
 let authenticatedUserProfile = null;
 let cloudDataHydrating = false;
 let employeeCloudWriteQueue = Promise.resolve();
 let kpiCloudWriteQueue = Promise.resolve();
+function roleLabel(role) { return role === 'Admin' ? 'Administrator' : role === 'Supervisor' ? 'Atasan' : role === 'Employee' ? 'Karyawan' : 'Pengguna'; }
+function applyRoleNavigation(role) {
+  const allowed = role === 'Admin'
+    ? null
+    : role === 'Supervisor'
+      ? new Set(['dashboard','calendar','employees','attendance','performance','kpi','leave'])
+      : new Set(['dashboard','calendar','employees','attendance','leave']);
+  document.querySelectorAll('.main-nav .nav-link').forEach(link => {
+    link.hidden = Boolean(allowed && !allowed.has(link.dataset.module));
+  });
+  document.body.dataset.authRole = role || '';
+}
 function installSupabaseAuthGate() {
   if (!window.KharismaDB?.auth) return;
   const root = document.querySelector('.app-shell');
   if (!root) return;
+  root.hidden = true;
   const gate = document.createElement('section');
   gate.className = 'auth-gate';
   gate.hidden = true;
-  gate.innerHTML = `<form class="auth-card" id="supabaseLoginForm"><div class="auth-brand">Kharisma Hub</div><h1>Masuk ke akun Anda</h1><p>Gunakan akun perusahaan yang dikelola administrator.</p><label>Email<input name="email" type="email" autocomplete="username" required /></label><label>Kata sandi<input name="password" type="password" autocomplete="current-password" required minlength="6" /></label><p class="auth-error" id="supabaseLoginError" role="alert"></p><button class="module-button primary" type="submit">Masuk</button><button class="auth-forgot" type="button" id="forgotPasswordButton">Lupa kata sandi?</button><button class="auth-config" type="button" id="changeSupabaseKeyButton">Ubah anon key Supabase</button><small id="supabaseAuthHint"></small></form>`;
+  gate.innerHTML = `<div class="auth-layout"><aside class="auth-story"><a class="auth-logo" href="./index.html"><img src="./LogoKharismaGroup.png" alt="" /> Kharisma<span>Hub</span></a><div class="auth-story-copy"><span class="auth-eyebrow">RUANG KERJA SDM TERPADU</span><h2>Kelola tim dengan lebih terarah.</h2><p>Satu ruang aman untuk kehadiran, kinerja, dan perjalanan karyawan Anda.</p></div><div class="auth-story-footer">Â© 2026 PT Kharisma Group Indonesia</div></aside><div class="auth-panel"><form class="auth-card" id="supabaseLoginForm"><div class="auth-brand">Selamat datang kembali</div><h1>Masuk ke KharismaHub</h1><p>Gunakan akun perusahaan yang diberikan administrator.</p><label>Email kantor<input name="email" type="email" autocomplete="username" required /></label><label>Kata sandi<input name="password" type="password" autocomplete="current-password" required minlength="8" /></label><p class="auth-error" id="supabaseLoginError" role="alert" aria-live="polite"></p><button class="module-button primary" type="submit">Masuk ke akun</button><button class="auth-forgot" type="button" id="forgotPasswordButton">Lupa kata sandi?</button><small id="supabaseAuthHint" class="auth-hint"></small></form><form class="auth-card" id="supabaseSetPasswordForm" hidden><div class="auth-brand">Aktivasi akun</div><h1>Buat kata sandi Anda</h1><p>Undangan email berhasil diterima. Buat kata sandi untuk mengaktifkan akun.</p><label>Kata sandi baru<input name="password" type="password" autocomplete="new-password" required minlength="8" /></label><label>Ulangi kata sandi<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label><p class="auth-error" role="alert" aria-live="polite"></p><button class="module-button primary" type="submit">Aktifkan akun</button></form><form class="auth-card" id="supabaseResetPasswordForm" hidden><div class="auth-brand">Pemulihan akun</div><h1>Atur kata sandi baru</h1><p>Gunakan minimal 8 karakter untuk kata sandi baru Anda.</p><label>Kata sandi baru<input name="password" type="password" autocomplete="new-password" required minlength="8" /></label><label>Ulangi kata sandi<input name="confirmPassword" type="password" autocomplete="new-password" required minlength="8" /></label><p class="auth-error" role="alert" aria-live="polite"></p><button class="module-button primary" type="submit">Simpan kata sandi</button></form><div class="auth-status" id="authConfigurationStatus" role="status" hidden></div></div></div>`;
   document.body.append(gate);
-  const setLocked = (locked) => { gate.hidden = !locked; root.inert = locked; };
-  const applySession = async (session) => {
+  let applyingSession = Promise.resolve(false);
+  let applyingSessionToken = '';
+  const setLocked = (locked) => {
+    gate.hidden = !locked;
+    root.hidden = locked;
+    root.inert = locked;
+    root.removeAttribute('data-auth-pending');
+    document.body.classList.toggle('auth-active', !locked);
+    document.body.classList.add('auth-ready');
+  };
+  const showMode = mode => {
+    gate.querySelectorAll('.auth-card').forEach(card => { card.hidden = card.id !== mode; });
+    gate.querySelector('#authConfigurationStatus').hidden = true;
+  };
+  const setMessage = (selector, message, success = false) => {
+    const el = gate.querySelector(selector);
+    if (!el) return;
+    el.textContent = message || '';
+    el.classList.toggle('success', Boolean(success));
+  };
+  const showConfigurationError = message => {
+    showMode('supabaseLoginForm');
+    const status = gate.querySelector('#authConfigurationStatus');
+    status.hidden = false;
+    status.textContent = message;
+    gate.querySelector('#supabaseLoginForm [type="submit"]').disabled = true;
+    setLocked(true);
+  };
+  const hydrateScopedData = async () => {
+    const [employees, kpis, leaves, attendance, calendar] = await Promise.all([
+      window.KharismaDB.employees.getAll([]),
+      window.KharismaDB.kpi.getAll([]),
+      window.KharismaDB.leave.getAll([]),
+      window.KharismaDB.attendance.getAll(),
+      window.KharismaDB.calendar.getAll([])
+    ]);
+    employeeData.splice(0, employeeData.length, ...employees);
+    employeeData.forEach(person => { if (person[5] && /^EMP-/.test(person[5])) employeeIdByName.set(person[0], person[5].replace(/^EMP-/, '')); });
+    Object.keys(employeeProfileOverrides).forEach(name => delete employeeProfileOverrides[name]);
+    Object.assign(employeeProfileOverrides, window.__kharismaEmployeeProfiles || {});
+    kpiData.splice(0, kpiData.length, ...kpis);
+    leaveRequests.splice(0, leaveRequests.length, ...leaves);
+    cloudAttendanceRecords = attendance;
+    calendarItems.splice(0, calendarItems.length, ...calendar);
+    persistEmployeeData(); persistKpiData(); persistLeaveRequests(); writeStoredValue('teamhub.calendarItems', calendarItems);
+  };
+  const applySession = async session => {
+    if (session?.access_token && applyingSessionToken === session.access_token) return applyingSession;
+    applyingSessionToken = session?.access_token || '';
+    applyingSession = (async () => {
     authenticatedSupabaseSession = session || null;
-    if (!session) { authenticatedUserProfile = null; setLocked(true); return; }
+    if (!session) { authenticatedUserProfile = null; showMode('supabaseLoginForm'); setLocked(true); return false; }
     const { profile, error } = await window.KharismaDB.auth.getProfile(session.user.id);
     if (error || !profile || profile.status === 'Inactive') {
-      document.querySelector('#supabaseLoginError').textContent = 'Profil akun belum dibuat atau dinonaktifkan. Minta administrator menjalankan migrasi Supabase dan mengaktifkan akun.';
+      setMessage('#supabaseLoginError', 'Akun tidak aktif atau profil belum tersedia. Hubungi administrator perusahaan.');
       await window.KharismaDB.auth.signOut();
+      authenticatedSupabaseSession = null;
+      showMode('supabaseLoginForm');
       setLocked(true);
-      return;
+      return false;
+    }
+    if (profile.status === 'Pending') { showMode('supabaseSetPasswordForm'); setLocked(true); return false; }
+    if (!['Admin','Supervisor','Employee'].includes(profile.role) || (profile.role === 'Employee' && !profile.employee_id) || (profile.role === 'Supervisor' && !profile.department)) {
+      setMessage('#supabaseLoginError', 'Profil akun belum memiliki peran, karyawan, atau departemen yang valid. Hubungi administrator.');
+      await window.KharismaDB.auth.signOut(); authenticatedSupabaseSession = null; showMode('supabaseLoginForm'); setLocked(true); return false;
     }
     authenticatedUserProfile = profile;
-    const role = profile.role === 'Admin' ? 'Admin' : 'Supervisor';
+    const role = profile.role;
     const account = { id: profile.id, name: profile.full_name || session.user.email, email: session.user.email, role, department: profile.department || '', title: profile.title || role, status: profile.status || 'Active' };
-    userAccounts = [account, ...userAccounts.filter(item => item.id !== account.id)];
+    userAccounts.splice(0, userAccounts.length, account);
     activeAccountId = account.id;
     syncActiveProfileFromAccount(true);
     const profileEmailInput = document.querySelector('#profileInputEmail');
@@ -89,6 +158,23 @@ function installSupabaseAuthGate() {
       if (field) field.readOnly = true;
     }
     await window.KharismaDB.testConnection();
+    if (!window.KharismaDB.isConnected) {
+      setMessage('#supabaseLoginError', 'Data cloud belum dapat diverifikasi. Periksa koneksi dan konfigurasi Supabase.');
+      setLocked(true);
+      return false;
+    }
+    try { await hydrateScopedData(); }
+    catch (hydrateError) {
+      console.error('[KharismaAuth] Data dengan hak akses pengguna gagal dimuat:', hydrateError);
+      setMessage('#supabaseLoginError', 'Data akun belum dapat dimuat dengan aman. Periksa migrasi Supabase lalu coba lagi.');
+      setLocked(true);
+      return false;
+    }
+    if (role === 'Employee' && !employeeData.some(row => row[5] === profile.employee_id)) {
+      setMessage('#supabaseLoginError', 'Data karyawan untuk akun ini tidak dapat diakses. Hubungi administrator.');
+      await window.KharismaDB.auth.signOut(); authenticatedSupabaseSession = null; authenticatedUserProfile = null;
+      showMode('supabaseLoginForm'); setLocked(true); return false;
+    }
     if (window.KharismaDB.isConnected) {
       const attendance = await window.KharismaDB.attendance.getMine();
       if (attendance.record) { userAttendanceRecord = attendance.record; persistUserAttendance(false); }
@@ -102,12 +188,15 @@ function installSupabaseAuthGate() {
     if (role === 'Admin') {
       try {
         const result = await window.KharismaAuth.adminRequest('GET');
-        userAccounts = (result.data || []).map(item => ({ id: item.id, name: item.full_name, email: item.email || '', role: item.role, department: item.department || '', title: item.title || '', status: item.status, avatar: 'men/32', lastLogin: 'Kelola di Supabase Auth' }));
+        userAccounts = (result.data || []).map(item => ({ id: item.id, name: item.full_name, email: item.email || '', role: item.role, department: item.department || '', title: item.title || '', employeeId: item.employee_id || '', status: item.status, avatar: 'men/32', lastLogin: 'Kelola di Supabase Auth' }));
         if (!userAccounts.some(item => item.id === account.id)) userAccounts.unshift(account);
         syncActiveProfileFromAccount();
       } catch (error) { console.warn('[KharismaAuth] User list unavailable:', error.message); }
     }
     setLocked(false);
+    applyRoleNavigation(role);
+    const route = resolveRoute();
+    openModule(route.key, false, Object.fromEntries(route.params.entries()));
     const logout = document.querySelector('#supabaseLogoutButton');
     if (!logout) {
       const actions = document.querySelector('#userProfileForm .dialog-actions');
@@ -118,70 +207,99 @@ function installSupabaseAuthGate() {
         actions.prepend(button);
       }
     }
+    return true;
+    })();
+    try { return await applyingSession; }
+    finally { if (applyingSessionToken === (session?.access_token || '')) applyingSessionToken = ''; }
   };
-  const form = gate.querySelector('form');
+  const form = gate.querySelector('#supabaseLoginForm');
+  const resetForm = gate.querySelector('#supabaseResetPasswordForm');
+  const setPasswordForm = gate.querySelector('#supabaseSetPasswordForm');
   gate.querySelector('#forgotPasswordButton').addEventListener('click', async () => {
     const email = form.elements.email.value.trim();
     const errorEl = gate.querySelector('#supabaseLoginError');
     if (!email) { errorEl.textContent = 'Masukkan email terlebih dahulu untuk menerima tautan reset.'; return; }
     const result = await window.KharismaDB.auth.resetPassword(email);
-    errorEl.textContent = result.error ? result.error.message : 'Tautan reset kata sandi dikirim. Periksa kotak masuk email Anda.';
-    if (!result.error) errorEl.classList.add('success');
+    setMessage('#supabaseLoginError', result.error ? result.error.message : 'Jika email terdaftar, tautan pemulihan akan dikirim. Periksa kotak masuk Anda.', !result.error);
   });
-  gate.querySelector('#changeSupabaseKeyButton').addEventListener('click', async () => {
-    const currentKey = localStorage.getItem('kharisma_supabase_anon_key') || '';
-    const nextKey = window.prompt('Masukkan anon/public key Supabase untuk proyek ini:', currentKey);
-    if (nextKey === null) return;
-    await window.KharismaDB.setKey(nextKey.trim());
-    gate.querySelector('#supabaseAuthHint').textContent = 'Konfigurasi diperbarui. Coba masuk kembali.';
-    gate.querySelector('#supabaseLoginError').textContent = '';
+  const updatePassword = async (password, confirmPassword, activateInvite = false, errorElement) => {
+    if (password.length < 8) { errorElement.textContent = 'Kata sandi minimal 8 karakter.'; return false; }
+    if (password !== confirmPassword) { errorElement.textContent = 'Kata sandi tidak sama.'; return false; }
+    const updated = await window.KharismaDB.auth.updatePassword(password);
+    if (updated.error) { errorElement.textContent = updated.error.message || 'Kata sandi tidak dapat diperbarui.'; return false; }
+    if (activateInvite) {
+      const { session } = await window.KharismaDB.auth.getSession();
+      const response = await fetch('/api/activate', { method: 'POST', headers: { Authorization: `Bearer ${session?.access_token || ''}` } });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) { errorElement.textContent = result.error || 'Akun belum dapat diaktifkan. Hubungi administrator.'; return false; }
+      setMessage('#supabaseLoginError', 'Akun berhasil diaktifkan. Memuat ruang kerjaâ€¦', true);
+      await applySession(session);
+      return true;
+    }
+    await applySession((await window.KharismaDB.auth.getSession()).session);
+    return true;
+  };
+  setPasswordForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = setPasswordForm.querySelector('[type="submit"]');
+    const error = setPasswordForm.querySelector('.auth-error');
+    submit.disabled = true; error.textContent = '';
+    try { await updatePassword(setPasswordForm.elements.password.value, setPasswordForm.elements.confirmPassword.value, true, error); }
+    catch (e) { error.textContent = e.message || 'Kata sandi gagal disimpan.'; }
+    finally { submit.disabled = false; }
+  });
+  resetForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    const submit = resetForm.querySelector('[type="submit"]');
+    const error = resetForm.querySelector('.auth-error');
+    submit.disabled = true; error.textContent = '';
+    try {
+      const ok = await updatePassword(resetForm.elements.password.value, resetForm.elements.confirmPassword.value, false, error);
+      if (ok) { await window.KharismaDB.auth.signOut(); showMode('supabaseLoginForm'); setLocked(true); setMessage('#supabaseLoginError', 'Kata sandi berhasil diperbarui. Silakan masuk kembali.', true); }
+    } catch (e) { error.textContent = e.message || 'Kata sandi gagal disimpan.'; }
+    finally { submit.disabled = false; }
   });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     const submit = form.querySelector('button[type="submit"]');
     const errorEl = gate.querySelector('#supabaseLoginError');
-    submit.disabled = true; submit.textContent = 'Memeriksa…'; errorEl.textContent = '';
+    submit.disabled = true; submit.textContent = 'Memeriksaâ€¦'; errorEl.textContent = '';
     try {
       const result = await window.KharismaDB.auth.signIn(form.elements.email.value, form.elements.password.value);
       if (result.error) throw result.error;
-      await applySession(result.data.session);
-      if (!authenticatedSupabaseSession) throw new Error(errorEl.textContent || 'Sesi login tidak dapat dimulai.');
+      const applied = await applySession(result.data.session);
+      if (!applied && !result.data.session) throw new Error(errorEl.textContent || 'Sesi login tidak dapat dimulai.');
       form.reset();
     } catch (error) { errorEl.textContent = error.message || 'Login gagal. Periksa email dan kata sandi.'; }
     finally { submit.disabled = false; submit.textContent = 'Masuk'; }
   });
-  if (window.KharismaDB.auth.enabled) {
-    gate.querySelector('#supabaseAuthHint').textContent = 'Mode autentikasi Supabase aktif.';
+  window.KharismaDB.ready.then(async config => {
+    if (!config?.authRequired && !window.KharismaDB.auth.enabled) {
+      document.body.classList.add('auth-ready');
+      root.hidden = false;
+      root.inert = false;
+      root.removeAttribute('data-auth-pending');
+      return;
+    }
     setLocked(true);
-    window.KharismaDB.auth.getSession().then(({ session }) => applySession(session)).catch(() => setLocked(true));
-    window.KharismaDB.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') { authenticatedSupabaseSession = null; setLocked(true); }
-      else if (event === 'SIGNED_IN' && session) applySession(session);
-      else if (event === 'PASSWORD_RECOVERY') {
-        if (session) applySession(session);
-        const dialog = document.createElement('dialog');
-        dialog.className = 'record-dialog';
-        dialog.innerHTML = `<form id="recoveryPasswordForm"><h2>Atur kata sandi baru</h2><label>Kata sandi baru<input type="password" name="password" required minlength="8" autocomplete="new-password" /></label><label>Ulangi kata sandi<input type="password" name="confirmPassword" required minlength="8" autocomplete="new-password" /></label><p class="auth-error" role="alert"></p><div class="dialog-actions"><button class="module-button primary" type="submit">Simpan kata sandi</button></div></form>`;
-        document.body.append(dialog); dialog.showModal();
-        dialog.querySelector('form').addEventListener('submit', async (submitEvent) => {
-          submitEvent.preventDefault();
-          const data = new FormData(submitEvent.currentTarget);
-          if (data.get('password') !== data.get('confirmPassword')) { dialog.querySelector('.auth-error').textContent = 'Kata sandi tidak sama.'; return; }
-          const result = await window.KharismaDB.auth.updatePassword(data.get('password'));
-          if (result.error) { dialog.querySelector('.auth-error').textContent = result.error.message; return; }
-          dialog.close(); dialog.remove(); showToast('Kata sandi berhasil diperbarui.');
-        });
-      }
+    if (!window.KharismaDB.auth.enabled) {
+      showConfigurationError(config?.error || 'Login belum dikonfigurasi. Administrator harus menambahkan SUPABASE_ANON_KEY di Vercel.');
+      return;
+    }
+    if (!config?.backendConfigured) {
+      showConfigurationError(config?.error || 'Backend belum siap. Minta administrator mengatur SUPABASE_SERVICE_ROLE_KEY di Vercel.');
+      return;
+    }
+    setMessage('#supabaseAuthHint', 'Masuk menggunakan akun yang diundang administrator.');
+    const { session } = await window.KharismaDB.auth.getSession();
+    if (session) await applySession(session);
+    else showMode('supabaseLoginForm');
+    window.KharismaDB.auth.onAuthStateChange((event, nextSession) => {
+      if (event === 'SIGNED_OUT') { authenticatedSupabaseSession = null; authenticatedUserProfile = null; showMode('supabaseLoginForm'); setLocked(true); }
+      else if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && nextSession) applySession(nextSession);
+      else if (event === 'PASSWORD_RECOVERY' && nextSession) { showMode('supabaseResetPasswordForm'); setLocked(true); }
     });
-  } else {
-    gate.querySelector('#supabaseAuthHint').textContent = 'Mode demo lokal aktif. Tambahkan Supabase anon key di Pengaturan untuk mewajibkan login.';
-    window.addEventListener('kharisma:supabase-status', () => {
-      if (!window.KharismaDB.auth.enabled || authenticatedSupabaseSession) return;
-      gate.querySelector('#supabaseAuthHint').textContent = 'Supabase Auth aktif. Silakan masuk dengan akun perusahaan.';
-      setLocked(true);
-      window.KharismaDB.auth.getSession().then(({ session }) => applySession(session)).catch(() => setLocked(true));
-    });
-  }
+  }).catch(error => showConfigurationError(error.message || 'Konfigurasi login tidak dapat dimuat.'));
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', installSupabaseAuthGate, { once: true });
 else installSupabaseAuthGate();
@@ -286,7 +404,7 @@ async function performAttendanceTransition(action) {
   const eventAt = new Date().toISOString();
   attendanceActionPending = true;
   const button = moduleView.querySelector(`[data-action="attendance-transition"][data-transition="${action}"]`);
-  if (button) { button.disabled = true; button.textContent = 'Memeriksa lokasi…'; }
+  if (button) { button.disabled = true; button.textContent = 'Memeriksa lokasiâ€¦'; }
   try {
     const location = await getAttendanceLocation();
     const distance = attendanceDistanceMeters(Number(locationPolicy.latitude), Number(locationPolicy.longitude), location.latitude, location.longitude);
@@ -315,7 +433,7 @@ async function performAttendanceTransition(action) {
         if (current) throw new Error('Presensi masuk hari ini sudah tercatat.');
         const [sh, sm] = String(shift.start_time).slice(0, 5).split(':').map(Number);
         const lateMinutes = Math.max(0, attendanceMinutesOfDay(now) - (sh * 60 + sm + Number(shift.tolerance_minutes || 0)));
-        userAttendanceRecord = { employeeId: employeeCode, name: userProfile.name, dateKey: date, date, workModel: activeEmployee ? (employeeProfileOverrides[activeEmployee[0]]?.workModel || 'Kantor') : 'Kantor', clockInAt: now.toISOString(), clockIn: attendanceTimeLabel(now), clockOut: '', state: 'working', clockedIn: true, breakSessions: [], shiftId: shift.id, lateMinutes, status: lateMinutes ? 'Late' : 'On-Time', duration: 'Sedang Berjalan', overtime: '—', location };
+        userAttendanceRecord = { employeeId: employeeCode, name: userProfile.name, dateKey: date, date, workModel: activeEmployee ? (employeeProfileOverrides[activeEmployee[0]]?.workModel || 'Kantor') : 'Kantor', clockInAt: now.toISOString(), clockIn: attendanceTimeLabel(now), clockOut: '', state: 'working', clockedIn: true, breakSessions: [], shiftId: shift.id, lateMinutes, status: lateMinutes ? 'Late' : 'On-Time', duration: 'Sedang Berjalan', overtime: 'â€”', location };
       } else {
         if (!current) throw new Error('Catat presensi masuk terlebih dahulu.');
         const sessions = current.breakSessions || [];
@@ -335,7 +453,7 @@ async function performAttendanceTransition(action) {
           const end = new Date(`${date}T${String(shift.end_time).slice(0, 5)}:00+07:00`);
           if (String(shift.end_time).slice(0, 5) <= String(shift.start_time).slice(0, 5)) end.setDate(end.getDate() + 1);
           const extra = Math.max(0, Math.floor((now - end) / 60000));
-          current.overtime = extra ? `${Math.floor(extra / 60)}j ${extra % 60}m` : '—'; current.overtimeApprovalStatus = extra ? 'pending' : 'not_required';
+          current.overtime = extra ? `${Math.floor(extra / 60)}j ${extra % 60}m` : 'â€”'; current.overtimeApprovalStatus = extra ? 'pending' : 'not_required';
         }
         current.breakSessions = sessions; current.location = location; userAttendanceRecord = current;
       }
@@ -516,17 +634,17 @@ const avatar = (name, color = 'p1') => {
    ========================================================================== */
 
 const defaultCalendarItems = [
-  { id: 'cal-1', day: 1, date: '2035-06-01', title: 'Onboarding Session — New Hires Batch 3', time: '10:00 AM', location: 'HR Room 2B', category: 'Talent Acquisition', note: 'Prepare welcome kits and ID cards', tone: 0 },
-  { id: 'cal-2', day: 4, date: '2035-06-04', title: 'Interview — Product Designer', time: '09:00 AM', location: 'Meeting Room C', category: 'Talent Acquisition', note: 'Review portfolio first', tone: 0 },
+  { id: 'cal-1', day: 1, date: '2035-06-01', title: 'Onboarding Session â€” New Hires Batch 3', time: '10:00 AM', location: 'HR Room 2B', category: 'Talent Acquisition', note: 'Prepare welcome kits and ID cards', tone: 0 },
+  { id: 'cal-2', day: 4, date: '2035-06-04', title: 'Interview â€” Product Designer', time: '09:00 AM', location: 'Meeting Room C', category: 'Talent Acquisition', note: 'Review portfolio first', tone: 0 },
   { id: 'cal-3', day: 4, date: '2035-06-04', title: 'Quarterly Policy Review', time: '03:00 PM', location: 'Conference Room 1A', category: 'Workplace Engagement', note: 'All department heads', tone: 2 },
   { id: 'cal-4', day: 7, date: '2035-06-07', title: 'Team Communication Workshop', time: '02:00 PM', location: 'Main Training Hall', category: 'Employee Development', note: 'Interactive session', tone: 1 },
-  { id: 'cal-5', day: 13, date: '2035-06-13', title: 'Performance Review Check-in — Marketing Team', time: '01:00 PM', location: 'Notion Review Sheet', category: 'Employee Development', note: 'Q2 deliverables assessment', tone: 1 },
-  { id: 'cal-6', day: 15, date: '2035-06-15', title: 'Recruitment Planning — Q3 Targets', time: '11:00 AM', location: 'Meeting Room A', category: 'Talent Acquisition', note: 'Headcount forecast', tone: 0 },
+  { id: 'cal-5', day: 13, date: '2035-06-13', title: 'Performance Review Check-in â€” Marketing Team', time: '01:00 PM', location: 'Notion Review Sheet', category: 'Employee Development', note: 'Q2 deliverables assessment', tone: 1 },
+  { id: 'cal-6', day: 15, date: '2035-06-15', title: 'Recruitment Planning â€” Q3 Targets', time: '11:00 AM', location: 'Meeting Room A', category: 'Talent Acquisition', note: 'Headcount forecast', tone: 0 },
   { id: 'cal-7', day: 18, date: '2035-06-18', title: 'Remote Work Compliance Briefing', time: '09:30 AM', location: 'Zoom (link in calendar)', category: 'Workplace Engagement', note: 'Mandatory for hybrid & remote staff', tone: 2 },
   { id: 'cal-8', day: 21, date: '2035-06-21', title: 'New Recruit Introduction', time: '09:00 AM', location: 'HR Room 2B', category: 'Talent Acquisition', note: 'Prepare welcome kits and ID cards', tone: 0 },
-  { id: 'cal-9', day: 21, date: '2035-06-21', title: 'Personal Growth Session — Leadership Track', time: '02:00 PM', location: 'Zoom (link shared via email)', category: 'Employee Development', note: 'Attendees must complete pre-session survey', tone: 1 },
+  { id: 'cal-9', day: 21, date: '2035-06-21', title: 'Personal Growth Session â€” Leadership Track', time: '02:00 PM', location: 'Zoom (link shared via email)', category: 'Employee Development', note: 'Attendees must complete pre-session survey', tone: 1 },
   { id: 'cal-10', day: 22, date: '2035-06-22', title: 'Upskilling Program: Advanced Excel', time: '03:30 PM', location: 'Computer Lab 1', category: 'Employee Development', note: 'Financial modeling practice', tone: 1 },
-  { id: 'cal-11', day: 27, date: '2035-06-27', title: 'Final Interview — Sales Manager', time: '10:00 AM', location: 'Boardroom 3', category: 'Talent Acquisition', note: 'CEO & HR Director panel', tone: 0 },
+  { id: 'cal-11', day: 27, date: '2035-06-27', title: 'Final Interview â€” Sales Manager', time: '10:00 AM', location: 'Boardroom 3', category: 'Talent Acquisition', note: 'CEO & HR Director panel', tone: 0 },
   { id: 'cal-12', day: 29, date: '2035-06-29', title: 'Internal Team-Building Event', time: '08:00 AM', location: 'Kurnia Green Park', category: 'Workplace Engagement', note: 'Sportswear and casual gear', tone: 2 }
 ];
 let calendarItems = readStoredValue('teamhub.calendarItems', defaultCalendarItems);
@@ -541,13 +659,13 @@ function persistCalendarItems() {
    ========================================================================== */
 
 const defaultLeaveRequests = [
-  { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2035', period: '20–22 Jun 2035', duration: '3 Days', reason: 'Doctor’s note attached', status: 'Approved' },
-  { id: 'lv-2', name: 'Jacob Yuen', title: 'Site Supervisor', type: 'Annual Leave', submitDate: '10 Jun 2035', period: '17–21 Jun 2035', duration: '5 Days', reason: 'Family trip', status: 'Approved' },
+  { id: 'lv-1', name: 'Lina Armand', title: 'Lab Analyst', type: 'Sick Leave', submitDate: '18 Jun 2035', period: '20â€“22 Jun 2035', duration: '3 Days', reason: 'Doctorâ€™s note attached', status: 'Approved' },
+  { id: 'lv-2', name: 'Jacob Yuen', title: 'Site Supervisor', type: 'Annual Leave', submitDate: '10 Jun 2035', period: '17â€“21 Jun 2035', duration: '5 Days', reason: 'Family trip', status: 'Approved' },
   { id: 'lv-3', name: 'Anya Rodriguez', title: 'Graphic Designer', type: 'Other Leave', submitDate: '17 Jun 2035', period: '19 Jun 2035', duration: '1 Day', reason: 'Personal matter', status: 'Pending' },
-  { id: 'lv-4', name: 'Olivia Mason', title: 'Marketing', type: 'Annual Leave', submitDate: '02 Jun 2035', period: '05–07 Jun 2035', duration: '3 Days', reason: 'Conference attendance', status: 'Approved' },
-  { id: 'lv-5', name: 'Sara Kim', title: 'Customer Support', type: 'Sick Leave', submitDate: '14 Jun 2035', period: '15–16 Jun 2035', duration: '2 Days', reason: 'Fever', status: 'Approved' },
-  { id: 'lv-6', name: 'Daniel Cheung', title: 'Compliance Specialist', type: 'Annual Leave', submitDate: '01 Jun 2035', period: '10–12 Jun 2035', duration: '3 Days', reason: 'Holiday', status: 'Pending' },
-  { id: 'lv-7', name: 'Mia Torres', title: 'HR Officer', type: 'Annual Leave', submitDate: '06 Jun 2035', period: '09–10 Jun 2035', duration: '2 Days', reason: 'Personal retreat', status: 'Approved' },
+  { id: 'lv-4', name: 'Olivia Mason', title: 'Marketing', type: 'Annual Leave', submitDate: '02 Jun 2035', period: '05â€“07 Jun 2035', duration: '3 Days', reason: 'Conference attendance', status: 'Approved' },
+  { id: 'lv-5', name: 'Sara Kim', title: 'Customer Support', type: 'Sick Leave', submitDate: '14 Jun 2035', period: '15â€“16 Jun 2035', duration: '2 Days', reason: 'Fever', status: 'Approved' },
+  { id: 'lv-6', name: 'Daniel Cheung', title: 'Compliance Specialist', type: 'Annual Leave', submitDate: '01 Jun 2035', period: '10â€“12 Jun 2035', duration: '3 Days', reason: 'Holiday', status: 'Pending' },
+  { id: 'lv-7', name: 'Mia Torres', title: 'HR Officer', type: 'Annual Leave', submitDate: '06 Jun 2035', period: '09â€“10 Jun 2035', duration: '2 Days', reason: 'Personal retreat', status: 'Approved' },
   { id: 'lv-8', name: 'Ethan Ray', title: 'UI Designer', type: 'Casual Leave', submitDate: '05 Jun 2035', period: '07 Jun 2035', duration: '1 Day', reason: 'Family event', status: 'Rejected' },
   { id: 'lv-9', name: 'Farah Nabila', title: 'Customer Experience Lead', type: 'Sick Leave', submitDate: '11 Jun 2035', period: '12 Jun 2035', duration: '1 Day', reason: 'Headache', status: 'Approved' },
   { id: 'lv-10', name: 'Kelvin Yu', title: 'Training Coordinator', type: 'Other Leave', submitDate: '13 Jun 2035', period: '14 Jun 2035', duration: '1 Day', reason: 'Volunteer program', status: 'Rejected' }
@@ -660,10 +778,13 @@ const defaultUserAccounts = [
 let userAccounts = readStoredValue('teamhub.userAccounts', defaultUserAccounts);
 function persistUserAccounts() { writeStoredValue('teamhub.userAccounts', userAccounts); }
 
-// Active session — which account is currently "logged in"
+// Active session â€” which account is currently "logged in"
 let activeAccountId = readStoredValue('teamhub.activeAccountId', 'usr-admin');
 function persistActiveAccount() { writeStoredValue('teamhub.activeAccountId', activeAccountId); }
 function getActiveAccount() {
+  if (authenticatedSupabaseSession && authenticatedUserProfile) {
+    return { id: authenticatedUserProfile.id, name: authenticatedUserProfile.full_name || authenticatedSupabaseSession.user.email, email: authenticatedSupabaseSession.user.email, role: authenticatedUserProfile.role, department: authenticatedUserProfile.department || '', title: authenticatedUserProfile.title || roleLabel(authenticatedUserProfile.role), status: authenticatedUserProfile.status };
+  }
   const acc = userAccounts.find(u => u.id === activeAccountId && u.status !== 'Inactive');
   return acc || userAccounts.find(u => u.role === 'Admin' && u.status === 'Active') || userAccounts.find(u => u.status === 'Active') || userAccounts[0] || defaultUserAccounts[0];
 }
@@ -675,14 +796,14 @@ function syncActiveProfileFromAccount(persist = false) {
   if (!account) return;
   userProfile.name = account.name;
   userProfile.email = account.email;
-  userProfile.role = account.title || (account.role === 'Admin' ? 'Administrator SDM' : 'Supervisor');
+  userProfile.role = account.role;
   userProfile.department = account.department || '';
   if (persist) persistUserProfile();
   document.querySelectorAll('.user-chip').forEach((chip) => {
     const name = chip.querySelector('strong');
     const role = chip.querySelector('small');
     if (name) name.textContent = account.name;
-    if (role) role.textContent = account.role === 'Admin' ? 'Administrator' : 'Supervisor';
+    if (role) role.textContent = roleLabel(account.role);
     chip.title = `Profil ${account.name}`;
     const avatarInitial = chip.querySelector('.avatar span');
     if (avatarInitial) avatarInitial.textContent = initials(account.name);
@@ -693,12 +814,12 @@ function syncActiveProfileFromAccount(persist = false) {
   const profileInitials = document.querySelector('#profileAvatarInitials');
   if (displayName) displayName.textContent = account.name;
   if (displayEmail) displayEmail.textContent = account.email;
-  if (roleBadge) roleBadge.textContent = `${userProfile.role} · ${userProfile.department}`;
+    if (roleBadge) roleBadge.textContent = `${roleLabel(userProfile.role)}${userProfile.department ? ` Â· ${userProfile.department}` : ''}`;
   if (profileInitials) profileInitials.textContent = initials(account.name);
 }
 syncActiveProfileFromAccount();
 
-/* Cross-module sync: Employee directory ↔ KPI PIC ↔ Division Head ↔ User Accounts */
+/* Cross-module sync: Employee directory â†” KPI PIC â†” Division Head â†” User Accounts */
 function findEmployeeByName(name) {
   const key = String(name || '').trim().toLowerCase();
   return employeeData.find(p => p[0].toLowerCase() === key) || null;
@@ -752,7 +873,7 @@ function getEmployeeLinks(name) {
    ========================================================================== */
 
 const inboxData = [
-  { id: 1, from: 'Olivia Mason', email: 'olivia.mason@company.com', subject: 'Leave Request Approval', preview: "Hi, I'd like to follow up on my annual leave request for next month, from July 15 to July 19.", time: '10:24 AM', date: '19 Jun', initials: 'OM', color: 'p1', label: 'Leave Requests', body: ["Hi there,", "I'd like to follow up on my annual leave request for the dates 15–19 July.", 'The request is still marked as pending, and I wanted to confirm if any additional documents are needed.', 'Please let me know if you need anything else from my side.', 'Thanks so much!', '— Olivia'], unread: true, starred: false },
+  { id: 1, from: 'Olivia Mason', email: 'olivia.mason@company.com', subject: 'Leave Request Approval', preview: "Hi, I'd like to follow up on my annual leave request for next month, from July 15 to July 19.", time: '10:24 AM', date: '19 Jun', initials: 'OM', color: 'p1', label: 'Leave Requests', body: ["Hi there,", "I'd like to follow up on my annual leave request for the dates 15â€“19 July.", 'The request is still marked as pending, and I wanted to confirm if any additional documents are needed.', 'Please let me know if you need anything else from my side.', 'Thanks so much!', 'â€” Olivia'], unread: true, starred: false },
   { id: 2, from: 'Ethan Ray', email: 'ethan.ray@company.com', subject: 'Updated Contact Info', preview: "Just a quick heads-up that I've updated my emergency contact details on my profile.", time: '09:40 AM', date: '19 Jun', initials: 'ER', color: 'p2', label: 'HR', body: ['Hi Davis,', "I've updated my emergency contact details on my profile. Please let me know if you need anything else.", 'Thanks,', 'Ethan'], unread: true, starred: false },
   { id: 3, from: 'Lina Armand', email: 'lina.armand@company.com', subject: 'Medical Leave Submission', preview: "I've attached my doctor's note for the requested medical leave from June 20 to June 21.", time: '04:59 PM', date: '18 Jun', initials: 'LA', color: 'p3', label: 'Leave Requests', body: ['Hello,', "I've submitted my medical leave request and attached my doctor's note for the requested dates.", 'Please let me know if you need any additional information.', 'Best,', 'Lina'], unread: false, starred: false },
   { id: 4, from: 'HR Department', email: 'hr@kharismahub.com', subject: 'Performance Review Reminder', preview: 'A reminder to complete your self-assessment form as part of the performance review cycle.', time: '03:11 PM', date: '18 Jun', initials: 'HR', color: 'dark-avatar', label: 'Interview', body: ['Hello team,', 'This is a reminder to complete your self-assessment form as part of the mid-year performance review cycle.', 'Please submit your responses by 28 June.', 'Thank you,', 'HR Department'], unread: false, starred: false },
@@ -767,7 +888,7 @@ let sentMail = [
   { id: 'sent-2', from: 'Davis Levin', email: 'davis.levin@kharismahub.com', subject: 'Welcome aboard!', preview: 'We are excited to have you join the Kharisma Hub team.', time: 'Yesterday', date: '18 Jun', initials: 'DL', color: 'avatar-davis', label: 'HR', body: ['Welcome aboard! We are excited to have you join the Kharisma Hub team.', 'Best, Davis'], unread: false, starred: false },
 ];
 let draftMail = [
-  { id: 'draft-1', from: 'Davis Levin', email: 'davis.levin@kharismahub.com', subject: 'Draft: July planning', preview: 'A few notes for next month’s planning meeting...', time: 'Yesterday', date: '18 Jun', initials: 'DL', color: 'avatar-davis', label: 'HR', body: ['A few notes for next month’s planning meeting...'], unread: false, starred: false },
+  { id: 'draft-1', from: 'Davis Levin', email: 'davis.levin@kharismahub.com', subject: 'Draft: July planning', preview: 'A few notes for next monthâ€™s planning meeting...', time: 'Yesterday', date: '18 Jun', initials: 'DL', color: 'avatar-davis', label: 'HR', body: ['A few notes for next monthâ€™s planning meeting...'], unread: false, starred: false },
 ];
 let archivedMail = [];
 let trashedMail = [];
@@ -804,9 +925,9 @@ function setupTablePagination() {
     if (Number(page) === 1 && label === '1') control.classList.add('page-current');
     controls.append(control);
   };
-  addPageButton('‹', 0, true);
+  addPageButton('â€¹', 0, true);
   for (let page = 1; page <= pageCount; page += 1) addPageButton(String(page), page);
-  addPageButton('›', Math.min(2, pageCount), pageCount <= 1);
+  addPageButton('â€º', Math.min(2, pageCount), pageCount <= 1);
   pagination.append(controls);
   const resultLabel = pagination.querySelector('label');
   if (resultLabel && sizeSelect) {
@@ -826,9 +947,9 @@ function showTablePage(page) {
   pagination.dataset.currentPage = String(nextPage);
   rows.forEach((row, index) => { row.hidden = index < (nextPage - 1) * pageSize || index >= nextPage * pageSize; });
   pagination.querySelectorAll('[data-action="table-page"]').forEach((button) => {
-    button.classList.toggle('page-current', Number(button.dataset.page) === nextPage && button.textContent.trim() !== '‹' && button.textContent.trim() !== '›');
-    if (button.textContent.trim() === '‹') { button.dataset.page = String(Math.max(1, nextPage - 1)); button.disabled = nextPage === 1; }
-    if (button.textContent.trim() === '›') { button.dataset.page = String(Math.min(pageCount, nextPage + 1)); button.disabled = nextPage === pageCount; }
+    button.classList.toggle('page-current', Number(button.dataset.page) === nextPage && button.textContent.trim() !== 'â€¹' && button.textContent.trim() !== 'â€º');
+    if (button.textContent.trim() === 'â€¹') { button.dataset.page = String(Math.max(1, nextPage - 1)); button.disabled = nextPage === 1; }
+    if (button.textContent.trim() === 'â€º') { button.dataset.page = String(Math.min(pageCount, nextPage + 1)); button.disabled = nextPage === pageCount; }
   });
 }
 
@@ -876,7 +997,7 @@ function renderDashboardMiniCalendar() {
   const month = calendarDate.getMonth();
   const monthName = new Intl.DateTimeFormat('id-ID', { month: 'long' }).format(calendarDate);
   const monthBtn = document.querySelector('#monthButton');
-  if (monthBtn) monthBtn.innerHTML = `${monthName} ${year} <span>⌄</span>`;
+  if (monthBtn) monthBtn.innerHTML = `${monthName} ${year} <span>âŒ„</span>`;
   grid.replaceChildren();
   weekdays.forEach((day) => {
     const item = document.createElement('span');
@@ -906,7 +1027,7 @@ function renderDashboardMiniCalendar() {
       selectedDate = day;
       renderDashboardMiniCalendar();
       const schedBtn = document.querySelector('#scheduleDate');
-      if (schedBtn) schedBtn.innerHTML = `${day} ${monthName.slice(0, 3)} <span>⌄</span>`;
+      if (schedBtn) schedBtn.innerHTML = `${day} ${monthName.slice(0, 3)} <span>âŒ„</span>`;
       renderDashboardScheduleList(day);
     };
     item.addEventListener('click', selectDay);
@@ -929,7 +1050,7 @@ function renderDashboardScheduleList(day = selectedDate) {
     return date && date.getFullYear() === calendarDate.getFullYear() && date.getMonth() === calendarDate.getMonth() && date.getDate() === Number(day);
   });
   if (!dayEvents.length) {
-    list.innerHTML = `<div style="padding:14px 10px;text-align:center;color:#64748b;font-size:10px;background:#f8fafc;border-radius:8px">Tidak ada jadwal untuk tanggal ${day} ${monthName}. <button class="date-filter" style="margin-top:6px;display:inline-block" data-action="new-event">＋ Tambah Agenda</button></div>`;
+    list.innerHTML = `<div style="padding:14px 10px;text-align:center;color:#64748b;font-size:10px;background:#f8fafc;border-radius:8px">Tidak ada jadwal untuk tanggal ${day} ${monthName}. <button class="date-filter" style="margin-top:6px;display:inline-block" data-action="new-event">ï¼‹ Tambah Agenda</button></div>`;
     return;
   }
   list.innerHTML = dayEvents.map((event, i) => `
@@ -965,7 +1086,7 @@ function renderDashboardSummary() {
   const rate = total ? Math.round((onTimeCount / total) * 100) : 92;
 
   if (attendanceRateEl) {
-    attendanceRateEl.innerHTML = `${rate}% <small>Present · ${leaveCount} On Leave, ${lateCount} Late</small>`;
+    attendanceRateEl.innerHTML = `${rate}% <small>Present Â· ${leaveCount} On Leave, ${lateCount} Late</small>`;
   }
 
   const approvedLeave = leaveRequests.filter(r => r.status === 'Approved').length;
@@ -997,10 +1118,10 @@ function renderDashboardSummary() {
   const legend = document.querySelector('.employment-legend');
   if (legend) {
     legend.innerHTML = `
-      <div><i class="legend-full"></i><span><strong>Full-Time</strong><small>${total ? Math.round((fullTime/total)*100) : 75}% — ${fullTime} Pegawai</small></span></div>
-      <div><i class="legend-part"></i><span><strong>Part-Time</strong><small>${total ? Math.round((partTime/total)*100) : 15}% — ${partTime} Pegawai</small></span></div>
-      <div><i class="legend-free"></i><span><strong>Freelance/Kontrak</strong><small>${total ? Math.round((freelance/total)*100) : 10}% — ${freelance} Pegawai</small></span></div>
-      <div><i class="legend-intern"></i><span><strong>Internship</strong><small>${total ? Math.round((intern/total)*100) : 0}% — ${intern} Pegawai</small></span></div>
+      <div><i class="legend-full"></i><span><strong>Full-Time</strong><small>${total ? Math.round((fullTime/total)*100) : 75}% â€” ${fullTime} Pegawai</small></span></div>
+      <div><i class="legend-part"></i><span><strong>Part-Time</strong><small>${total ? Math.round((partTime/total)*100) : 15}% â€” ${partTime} Pegawai</small></span></div>
+      <div><i class="legend-free"></i><span><strong>Freelance/Kontrak</strong><small>${total ? Math.round((freelance/total)*100) : 10}% â€” ${freelance} Pegawai</small></span></div>
+      <div><i class="legend-intern"></i><span><strong>Internship</strong><small>${total ? Math.round((intern/total)*100) : 0}% â€” ${intern} Pegawai</small></span></div>
     `;
   }
 }
@@ -1054,7 +1175,7 @@ function getCalendarScheduleCards(day, eventId = selectedCalendarEventId) {
     return `
       <div style="padding:20px 10px;text-align:center;color:#64748b;font-size:11px">
         <p style="margin:0 0 8px">Tidak ada jadwal pada tanggal ini.</p>
-        <button class="module-button primary" data-action="new-event">＋ Tambah Agenda</button>
+        <button class="module-button primary" data-action="new-event">ï¼‹ Tambah Agenda</button>
       </div>
     `;
   }
@@ -1065,7 +1186,7 @@ function getCalendarScheduleCards(day, eventId = selectedCalendarEventId) {
       <dl>
         <dt>Waktu</dt><dd>${safe(ev.time)}</dd>
         <dt>Lokasi</dt><dd>${safe(ev.location)}</dd>
-        <dt>Catatan</dt><dd>${safe(ev.note || '—')}</dd>
+        <dt>Catatan</dt><dd>${safe(ev.note || 'â€”')}</dd>
       </dl>
       <div style="display:flex;justify-content:flex-end;margin-top:6px">
         <button class="date-filter" data-action="delete-calendar-event" data-id="${ev.id}" style="color:#b23b3b;background:#fdecec">Hapus Agenda</button>
@@ -1165,8 +1286,8 @@ function pageMarkup(key) {
         name: record.employee_name || employee?.[0] || 'Karyawan', rawName: employee?.[0] || record.employee_name || 'Karyawan',
         id: record.employee_id || '', title: employee?.[3] || 'Karyawan', dept: employee?.[2] || '',
         date: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(date),
-        workModel: record.work_model || '—', checkInOut: `${record.clock_in || '—'} – ${record.clock_out || 'Aktif'}`,
-        duration: record.duration || '—', overtime: record.overtime || '—', status: record.state && record.state !== 'completed' ? 'Belum Lengkap' : ({ 'On-Time': 'Tepat Waktu', Late: 'Terlambat', 'On Leave': 'Cuti', Absent: 'Tidak Hadir' }[record.status] || record.status || 'Tepat Waktu'), avatarIdx: (i % 9) + 1
+        workModel: record.work_model || 'â€”', checkInOut: `${record.clock_in || 'â€”'} â€“ ${record.clock_out || 'Aktif'}`,
+        duration: record.duration || 'â€”', overtime: record.overtime || 'â€”', status: record.state && record.state !== 'completed' ? 'Belum Lengkap' : ({ 'On-Time': 'Tepat Waktu', Late: 'Terlambat', 'On Leave': 'Cuti', Absent: 'Tidak Hadir' }[record.status] || record.status || 'Tepat Waktu'), avatarIdx: (i % 9) + 1
       });
     });
   } else if (userAttendanceRecord) {
@@ -1178,9 +1299,9 @@ function pageMarkup(key) {
       dept: userProfile.department || 'Human Resources',
       date: userAttendanceRecord.date || '19 Jun 2035',
       workModel: userAttendanceRecord.workModel || 'Di Kantor',
-      checkInOut: userAttendanceRecord.clockIn + (userAttendanceRecord.clockOut ? ' – ' + userAttendanceRecord.clockOut : ' – Aktif'),
+      checkInOut: userAttendanceRecord.clockIn + (userAttendanceRecord.clockOut ? ' â€“ ' + userAttendanceRecord.clockOut : ' â€“ Aktif'),
       duration: userAttendanceRecord.duration || 'Sedang Berjalan',
-      overtime: userAttendanceRecord.overtime || '—',
+      overtime: userAttendanceRecord.overtime || 'â€”',
       status: userAttendanceRecord.status || 'On-Time',
       avatarIdx: 1,
       isUser: true
@@ -1223,7 +1344,7 @@ function pageMarkup(key) {
     return `
       <div class="inbox-workspace">
         <aside class="mail-folders">
-          <button class="module-button primary compose-new" data-action="new-message">＋ &nbsp;New Message</button>
+          <button class="module-button primary compose-new" data-action="new-message">ï¼‹ &nbsp;New Message</button>
           <div class="folder-list">
             ${[['Inbox','10','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>'],['Starred','3','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'],['Sent','5','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>'],['Drafts','2','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>'],['Spam','1','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>'],['Trash','','<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>']].map(([name,count,icon]) => `
               <button class="folder-button ${name === activeMailFolder ? 'selected' : ''}" data-folder="${name}">
@@ -1241,7 +1362,7 @@ function pageMarkup(key) {
         </aside>
         <section class="mail-list-pane">
           <div class="mail-search-row">
-            <label class="mail-search"><span>⌕</span><input id="mailSearch" placeholder="Search email" aria-label="Search email" /></label>
+            <label class="mail-search"><span>âŒ•</span><input id="mailSearch" placeholder="Search email" aria-label="Search email" /></label>
             <button class="mail-filter-button" data-action="mail-filter" aria-label="Filter email"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg></button>
           </div>
           <div class="mail-list" id="mailList"></div>
@@ -1249,15 +1370,15 @@ function pageMarkup(key) {
         <section class="mail-detail-pane">
           <div class="mail-detail-toolbar">
             <div>
-              <button data-action="mail-back" aria-label="Back">‹</button>
+              <button data-action="mail-back" aria-label="Back">â€¹</button>
               <button data-action="archive-message" aria-label="Archive"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="21 8 21 21 3 21 3 8"/><rect width="22" height="5" x="1" y="3" rx="1"/><line x1="10" y1="12" x2="14" y2="12"/></svg></button>
               <button data-action="delete-message" aria-label="Delete"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
               <button data-action="print-message" aria-label="Print"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg></button>
-              <button data-action="mail-more" aria-label="More">···</button>
+              <button data-action="mail-more" aria-label="More">Â·Â·Â·</button>
             </div>
             <span id="mailCounter">1 from 36</span>
-            <button data-action="mail-prev" aria-label="Previous email">‹</button>
-            <button data-action="mail-next" aria-label="Next email">›</button>
+            <button data-action="mail-prev" aria-label="Previous email">â€¹</button>
+            <button data-action="mail-next" aria-label="Next email">â€º</button>
           </div>
           <div class="mail-reader" id="mailReader"></div>
           <form class="mail-composer" id="mailComposer">
@@ -1277,17 +1398,17 @@ function pageMarkup(key) {
               <input name="bcc" placeholder="bcc@kharismahub.com" aria-label="Blind carbon copy" />
             </div>
             <div class="compose-toolbar">
-              <button type="button" data-action="undo-compose" aria-label="Undo">↶</button>
-              <button type="button" data-action="redo-compose" aria-label="Redo">↷</button>
-              <span>Sans Serif ⌄</span><span>Aa ⌄</span>
+              <button type="button" data-action="undo-compose" aria-label="Undo">â†¶</button>
+              <button type="button" data-action="redo-compose" aria-label="Redo">â†·</button>
+              <span>Sans Serif âŒ„</span><span>Aa âŒ„</span>
               <button type="button" data-action="format-bold"><b>B</b></button>
               <button type="button" data-action="format-italic"><i>I</i></button>
               <button type="button" data-action="format-underline"><u>U</u></button>
-              <span>≡ ⌄</span><span>☷ ⌄</span>
+              <span>â‰¡ âŒ„</span><span>â˜· âŒ„</span>
             </div>
             <div class="compose-body" contenteditable="true" role="textbox" aria-label="Message body" data-placeholder="Type something..."></div>
             <div class="compose-actions">
-              <button class="send-button" type="submit">Send Message <span>⌄</span></button>
+              <button class="send-button" type="submit">Send Message <span>âŒ„</span></button>
               <button type="button" data-action="save-draft">Save draft</button>
               <button type="button" data-action="delete-draft" aria-label="Discard draft"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
             </div>
@@ -1295,7 +1416,7 @@ function pageMarkup(key) {
         </section>
       </div>
       <footer class="inbox-footer">
-        <strong>Copyright © 2025 Kharisma Group</strong>
+        <strong>Copyright Â© 2025 Kharisma Group</strong>
         <a href="#privacy">Privacy Policy</a>
         <a href="#terms">Term and conditions</a>
         <a href="#contact">Contact</a>
@@ -1321,7 +1442,7 @@ function pageMarkup(key) {
       </div>
       <div class="calendar-workspace">
         <aside class="agenda-filters">
-          <div class="agenda-head"><strong>Filter</strong><button data-action="collapse-agenda">×</button></div>
+          <div class="agenda-head"><strong>Filter</strong><button data-action="collapse-agenda">Ã—</button></div>
           <h3>Agenda</h3>
           ${['Recruitment','Interview Schedules','Onboarding Session','Training Programs','Coaching Sessions','Performance Review','Company Events','Policies Deadlines','Leave Schedules'].map(x => `
             <label><input type="checkbox" checked />${x}</label>
@@ -1334,13 +1455,13 @@ function pageMarkup(key) {
         <section class="calendar-board">
           <div class="calendar-board-head">
             <div class="calendar-nav-wrap">
-              <button class="cal-nav-btn" data-action="prev-cal-month" title="Bulan Sebelumnya">‹</button>
-              <button class="month-title" id="calendarBoardMonth">${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(calendarDate)} <span>⌄</span></button>
-              <button class="cal-nav-btn" data-action="next-cal-month" title="Bulan Berikutnya">›</button>
+              <button class="cal-nav-btn" data-action="prev-cal-month" title="Bulan Sebelumnya">â€¹</button>
+              <button class="month-title" id="calendarBoardMonth">${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(calendarDate)} <span>âŒ„</span></button>
+              <button class="cal-nav-btn" data-action="next-cal-month" title="Bulan Berikutnya">â€º</button>
             </div>
             <div>
-              <button class="date-filter" data-action="calendar-filter">Filter <span>⌄</span></button>
-              <button class="date-filter" data-action="calendar-mode">Month <span>⌄</span></button>
+              <button class="date-filter" data-action="calendar-filter">Filter <span>âŒ„</span></button>
+              <button class="date-filter" data-action="calendar-mode">Month <span>âŒ„</span></button>
               <button class="module-button primary" data-action="new-event">+ New Agenda</button>
             </div>
           </div>
@@ -1350,7 +1471,7 @@ function pageMarkup(key) {
         <aside class="schedule-details">
           <div class="agenda-head">
             <span><strong>Details Schedule</strong><small id="selectedScheduleDate">${selectedDate} ${new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(calendarDate)}</small></span>
-            <button data-action="close-schedule-details">×</button>
+            <button data-action="close-schedule-details">Ã—</button>
           </div>
           <div id="calendarDetailsList">${getCalendarScheduleCards(selectedDate)}</div>
         </aside>
@@ -1365,20 +1486,20 @@ function pageMarkup(key) {
         <div class="employee-stat-grid">
           <article class="employee-stat highlight"><span>Total Employees</span><strong>${employeeData.length}</strong><small>+1.6% <em>from last month</em></small></article>
           <article class="employee-stat"><span>New Employees (This Month)</span><strong>7</strong><small>+5.8% <em>from last month</em></small></article>
-          <article class="employee-stat"><span>Turnover Rate</span><strong>3.1%</strong><small>−2.4% <em>from last month</em></small></article>
+          <article class="employee-stat"><span>Turnover Rate</span><strong>3.1%</strong><small>âˆ’2.4% <em>from last month</em></small></article>
           <article class="employee-stat"><span>Resigned Employees</span><strong>4</strong><small>+2.1% <em>from last month</em></small></article>
         </div>
         <section class="department-card">
-          <div class="module-card-head"><h2>Departments</h2><button class="date-filter">This Month ⌄</button></div>
+          <div class="module-card-head"><h2>Departments</h2><button class="date-filter">This Month âŒ„</button></div>
           <div class="department-content">
             <div class="department-donut"><strong>8</strong><small>Departments</small></div>
             <div class="department-legend">
-              <div><i class="dept-color c0"></i><span>Customer Service<small>26 — <b>20%</b></small></span></div>
-              <div><i class="dept-color c1"></i><span>Product Design<small>20 — <b>16%</b></small></span></div>
-              <div><i class="dept-color c2"></i><span>Operations<small>26 — <b>20%</b></small></span></div>
-              <div><i class="dept-color c3"></i><span>R&amp;D<small>18 — <b>14%</b></small></span></div>
-              <div><i class="dept-color c4"></i><span>Marketing<small>23 — <b>18%</b></small></span></div>
-              <div><i class="dept-color c5"></i><span>Human Resources<small>15 — <b>12%</b></small></span></div>
+              <div><i class="dept-color c0"></i><span>Customer Service<small>26 â€” <b>20%</b></small></span></div>
+              <div><i class="dept-color c1"></i><span>Product Design<small>20 â€” <b>16%</b></small></span></div>
+              <div><i class="dept-color c2"></i><span>Operations<small>26 â€” <b>20%</b></small></span></div>
+              <div><i class="dept-color c3"></i><span>R&amp;D<small>18 â€” <b>14%</b></small></span></div>
+              <div><i class="dept-color c4"></i><span>Marketing<small>23 â€” <b>18%</b></small></span></div>
+              <div><i class="dept-color c5"></i><span>Human Resources<small>15 â€” <b>12%</b></small></span></div>
             </div>
           </div>
         </section>
@@ -1387,8 +1508,8 @@ function pageMarkup(key) {
         <div class="module-card-head">
           <h2>Employee List</h2>
           <div class="module-heading-actions">
-            <label class="module-search">⌕ <input data-filter="employees" placeholder="Search employee" /></label>
-            <button class="date-filter" data-action="employee-filter">Filter <span>⌄</span></button>
+            <label class="module-search">âŒ• <input data-filter="employees" placeholder="Search employee" /></label>
+            <button class="date-filter" data-action="employee-filter">Filter <span>âŒ„</span></button>
             <span class="toolbar-note">Sort by:</span>
             <select class="module-select"><option>Name</option><option>Join Date</option><option>Department</option></select>
             <button class="module-button primary" data-action="add-employee-page">New Employee</button>
@@ -1400,14 +1521,14 @@ function pageMarkup(key) {
             <thead>
               <tr>
                 <th><input type="checkbox" aria-label="Select all" /></th>
-                <th>Employee ID ↕</th>
-                <th>Name ↕</th>
-                <th>Job Title ↕</th>
-                <th>Department ↕</th>
-                <th>Employment Type ↕</th>
-                <th>Work Model ↕</th>
-                <th>Join Date ↕</th>
-                <th>Status ↕</th>
+                <th>Employee ID â†•</th>
+                <th>Name â†•</th>
+                <th>Job Title â†•</th>
+                <th>Department â†•</th>
+                <th>Employment Type â†•</th>
+                <th>Work Model â†•</th>
+                <th>Join Date â†•</th>
+                <th>Status â†•</th>
                 <th>Aksi</th>
               </tr>
             </thead>
@@ -1426,8 +1547,8 @@ function pageMarkup(key) {
   if (key === 'employee-grid') {
     return `
       <div class="employee-grid-toolbar">
-        <label class="module-search">⌕ <input data-filter="employees" placeholder="Search employee" /></label>
-        <button class="date-filter" data-action="employee-filter"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span>⌄</span></button>
+        <label class="module-search">âŒ• <input data-filter="employees" placeholder="Search employee" /></label>
+        <button class="date-filter" data-action="employee-filter"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg> Filter <span>âŒ„</span></button>
         <select><option>All Department</option><option>Marketing</option><option>Product Design</option><option>Operations</option><option>Human Resources</option></select>
         <select><option>All Position</option><option>Designer</option><option>Manager</option><option>Executive</option></select>
         <span></span><small>Sort by:</small>
@@ -1490,12 +1611,12 @@ function pageMarkup(key) {
             <div class="employee-social">
               <span>Social Media:</span>
               <a href="#linkedin" aria-label="LinkedIn">in</a>
-              <a href="#x" aria-label="X">𝕏</a>
+              <a href="#x" aria-label="X">ð•</a>
               <a href="#instagram" aria-label="Instagram"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg></a>
             </div>
           </section>
           <section class="module-card employee-personal-card">
-            <div class="module-card-head"><h2>Personal Info</h2><button class="kebab" aria-label="Personal info options">···</button></div>
+            <div class="module-card-head"><h2>Personal Info</h2><button class="kebab" aria-label="Personal info options">Â·Â·Â·</button></div>
             <div class="personal-info-list">
               <p><i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></i><span><small>Gender</small><b>${safe(profile.gender)}</b></span></p>
               <p><i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></i><span><small>Date of Birth</small><b>${safe(profile.birthDate)}</b></span></p>
@@ -1519,7 +1640,7 @@ function pageMarkup(key) {
           </div>
           <section class="module-card employee-performance-detail">
             <div class="module-card-head"><h2>Performance Overview</h2><select><option>Last Year</option><option>This Year</option></select></div>
-            <div class="detail-performance-score"><strong>${safe(profile.score)}</strong><span>↗ ${safe(profile.scoreChange)} Increased by last year</span></div>
+            <div class="detail-performance-score"><strong>${safe(profile.score)}</strong><span>â†— ${safe(profile.scoreChange)} Increased by last year</span></div>
             <div class="employee-performance-chart">
               <div class="detail-y-axis"><span>100%</span><span>75%</span><span>50%</span><span>25%</span><span>0%</span></div>
               <div class="detail-chart-plot">
@@ -1546,16 +1667,16 @@ function pageMarkup(key) {
               </div>
             </section>
             <section class="module-card employee-documents-card">
-              <div class="module-card-head"><h2>Documents</h2><button class="kebab" aria-label="Document options">···</button></div>
+              <div class="module-card-head"><h2>Documents</h2><button class="kebab" aria-label="Document options">Â·Â·Â·</button></div>
               <div class="employee-document-list">
-                ${[['Performance Evaluation.pdf','PDF · 1.24 MB'],['Contract Agreement.pdf','PDF · 895 KB'],['Curriculum Vitae.pdf','PDF · 1.27 MB'],['Portfolio.pdf','PDF · 3.68 MB']].map(([name,meta]) => `
+                ${[['Performance Evaluation.pdf','PDF Â· 1.24 MB'],['Contract Agreement.pdf','PDF Â· 895 KB'],['Curriculum Vitae.pdf','PDF Â· 1.27 MB'],['Portfolio.pdf','PDF Â· 3.68 MB']].map(([name,meta]) => `
                   <a href="#document" class="employee-document"><i><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></i><span><b>${name}</b><small>${meta}</small></span></a>
                 `).join('')}
               </div>
             </section>
           </div>
           <section class="module-card employee-notes-card">
-            <div class="module-card-head"><h2>Internal Notes</h2><button class="kebab" aria-label="Note options">···</button></div>
+            <div class="module-card-head"><h2>Internal Notes</h2><button class="kebab" aria-label="Note options">Â·Â·Â·</button></div>
             <div class="employee-notes-grid">
               <article><strong>Promotion Feedback</strong><small>10 January 2035</small><p>${safe(profile.name)} is building a strong record in ${safe(profile.department)} through consistent performance and team support.</p></article>
               <article><strong>Employee Appreciation</strong><small>02 May 2035</small><p>${safe(profile.name)} is recognized for contributing to team goals and sharing expertise with colleagues.</p></article>
@@ -1564,7 +1685,7 @@ function pageMarkup(key) {
         </div>
         <aside class="employee-detail-side">
           <section class="module-card employee-calendar-card">
-            <div class="employee-mini-calendar-head"><strong>June 2035 ⌄</strong><div><button aria-label="Previous month">‹</button><button aria-label="Next month">›</button></div></div>
+            <div class="employee-mini-calendar-head"><strong>June 2035 âŒ„</strong><div><button aria-label="Previous month">â€¹</button><button aria-label="Next month">â€º</button></div></div>
             <div class="employee-mini-weekdays">${['S','M','T','W','T','F','S'].map((day) => `<span>${day}</span>`).join('')}</div>
             <div class="detail-calendar">
               ${Array.from({ length: 35 }, (_, i) => {
@@ -1760,21 +1881,21 @@ function pageMarkup(key) {
         </section>
       </div>
       <section class="module-card attendance-self-service">
-        <div class="module-card-head"><div><h2>Presensi Saya</h2><p class="dialog-desc">${assignedShift ? `Shift ${safe(assignedShift.name)} · ${String(assignedShift.start_time).slice(0,5)}–${String(assignedShift.end_time).slice(0,5)}` : 'Shift belum ditetapkan'} · ${attendanceDisplayState()}</p></div>
+        <div class="module-card-head"><div><h2>Presensi Saya</h2><p class="dialog-desc">${assignedShift ? `Shift ${safe(assignedShift.name)} Â· ${String(assignedShift.start_time).slice(0,5)}â€“${String(assignedShift.end_time).slice(0,5)}` : 'Shift belum ditetapkan'} Â· ${attendanceDisplayState()}</p></div>
           ${transitionAction ? `<button class="module-button primary" data-action="attendance-transition" data-transition="${transitionAction}">${transitionLabel}</button>` : `<span class="status ontime">Hari ini selesai</span>`}${activeRecordToday && userAttendanceRecord.state === 'working' ? `<button class="module-button secondary" data-action="attendance-transition" data-transition="clock_out">Presensi Pulang</button>` : ''}</div>
-        <div class="attendance-timeline"><span>Masuk <b>${safe(userAttendanceRecord?.clockIn || '—')}</b></span>${(userAttendanceRecord?.breakSessions || []).map((item,index)=>`<span>Istirahat ${index+1} <b>${attendanceTimeLabel(item.start)}–${item.end ? attendanceTimeLabel(item.end) : 'berlangsung'}</b></span>`).join('')}<span>Pulang <b>${safe(userAttendanceRecord?.clockOut || '—')}</b></span><span>Durasi bersih <b>${safe(userAttendanceRecord?.duration || '—')}</b></span><span>Lokasi <b>${userAttendanceRecord?.location?.verified ? `Terverifikasi · ${Math.round(userAttendanceRecord.location.distance)} m dari kantor` : 'Akan diperiksa saat absen'}</b></span>${userAttendanceRecord?.overtimeApprovalStatus === 'pending' ? '<span>Lembur <b>Menunggu persetujuan atasan</b></span>' : ''}${attendanceSyncQueue.length ? `<span>Antrean sinkronisasi <b>${attendanceSyncQueue.length} aksi menunggu validasi</b></span>` : ''}</div>
+        <div class="attendance-timeline"><span>Masuk <b>${safe(userAttendanceRecord?.clockIn || 'â€”')}</b></span>${(userAttendanceRecord?.breakSessions || []).map((item,index)=>`<span>Istirahat ${index+1} <b>${attendanceTimeLabel(item.start)}â€“${item.end ? attendanceTimeLabel(item.end) : 'berlangsung'}</b></span>`).join('')}<span>Pulang <b>${safe(userAttendanceRecord?.clockOut || 'â€”')}</b></span><span>Durasi bersih <b>${safe(userAttendanceRecord?.duration || 'â€”')}</b></span><span>Lokasi <b>${userAttendanceRecord?.location?.verified ? `Terverifikasi Â· ${Math.round(userAttendanceRecord.location.distance)} m dari kantor` : 'Akan diperiksa saat absen'}</b></span>${userAttendanceRecord?.overtimeApprovalStatus === 'pending' ? '<span>Lembur <b>Menunggu persetujuan atasan</b></span>' : ''}${attendanceSyncQueue.length ? `<span>Antrean sinkronisasi <b>${attendanceSyncQueue.length} aksi menunggu validasi</b></span>` : ''}</div>
         ${userAttendanceRecord?.id ? `<details class="attendance-correction"><summary>Ajukan koreksi catatan</summary><form data-attendance-correction><label>Jam masuk yang benar<input type="time" name="clockIn" value="${safe(String(userAttendanceRecord.clockIn || '').slice(0,5))}" /></label><label>Jam pulang yang benar<input type="time" name="clockOut" value="${safe(String(userAttendanceRecord.clockOut || '').slice(0,5))}" /></label><label>Alasan koreksi<textarea name="reason" minlength="5" maxlength="1000" required></textarea></label><button class="module-button secondary" type="submit">Kirim untuk Persetujuan</button></form></details>` : ''}
-        ${ownIncompleteRecords.map(record=>`<details class="attendance-correction"><summary>Lengkapi presensi ${safe(record.date)} · belum pulang</summary><form data-attendance-correction data-attendance-id="${safe(record.id)}"><label>Jam masuk yang benar<input type="time" name="clockIn" value="${safe(String(record.clock_in || '').slice(0,5))}" /></label><label>Jam pulang yang benar<input type="time" name="clockOut" required /></label><label>Alasan koreksi<textarea name="reason" minlength="5" maxlength="1000" required></textarea></label><button class="module-button secondary" type="submit">Ajukan Koreksi</button></form></details>`).join('')}
+        ${ownIncompleteRecords.map(record=>`<details class="attendance-correction"><summary>Lengkapi presensi ${safe(record.date)} Â· belum pulang</summary><form data-attendance-correction data-attendance-id="${safe(record.id)}"><label>Jam masuk yang benar<input type="time" name="clockIn" value="${safe(String(record.clock_in || '').slice(0,5))}" /></label><label>Jam pulang yang benar<input type="time" name="clockOut" required /></label><label>Alasan koreksi<textarea name="reason" minlength="5" maxlength="1000" required></textarea></label><button class="module-button secondary" type="submit">Ajukan Koreksi</button></form></details>`).join('')}
         ${localIncompleteRecords.map(record=>`<p class="dialog-desc attendance-incomplete-note">Presensi demo ${safe(record.date || record.dateKey)} belum lengkap. Lengkapi catatan atau ajukan koreksi setelah akun terhubung ke Supabase.</p>`).join('')}
       </section>
-      ${isAdmin() ? `<details class="module-card attendance-policy-admin"><summary>Pengaturan Lokasi, Shift, dan Penugasan</summary><form data-attendance-config><div class="dialog-two"><label>Lintang kantor<input type="number" step="any" name="latitude" value="${safe(attendancePolicy.location?.latitude ?? '')}" required /></label><label>Bujur kantor<input type="number" step="any" name="longitude" value="${safe(attendancePolicy.location?.longitude ?? '')}" required /></label></div><div class="dialog-two"><label>Radius kantor (meter)<input type="number" name="radius" min="20" max="5000" value="${safe(attendancePolicy.location?.radius_m || attendancePolicy.location?.radiusM || 150)}" required /></label><label>Nama shift<input name="shiftName" value="${safe(assignedShift?.name || attendancePolicy.shifts?.[0]?.name || 'Shift Pagi')}" required /></label></div><div class="dialog-two"><label>Mulai shift<input type="time" name="startTime" value="${safe(String(assignedShift?.start_time || attendancePolicy.shifts?.[0]?.start_time || '09:00').slice(0,5))}" required /></label><label>Selesai shift<input type="time" name="endTime" value="${safe(String(assignedShift?.end_time || attendancePolicy.shifts?.[0]?.end_time || '17:00').slice(0,5))}" required /></label></div><div class="dialog-two"><label>Toleransi terlambat (menit)<input type="number" name="tolerance" min="0" max="240" value="${safe(assignedShift?.tolerance_minutes || 15)}" /></label><label>Tetapkan shift kepada karyawan<select name="employeeId" required>${employeeData.map(person=>`<option value="EMP-${getEmployeeId(person)}">${safe(person[0])} · ${safe(person[2])}</option>`).join('')}</select></label></div><button class="module-button primary" type="submit">Simpan Kebijakan</button><small>Perubahan lokasi dan shift hanya tersimpan di Supabase saat terhubung. Atasan dapat menetapkan shift untuk karyawan di departemennya.</small></form></details>` : ''}
+      ${isAdmin() ? `<details class="module-card attendance-policy-admin"><summary>Pengaturan Lokasi, Shift, dan Penugasan</summary><form data-attendance-config><div class="dialog-two"><label>Lintang kantor<input type="number" step="any" name="latitude" value="${safe(attendancePolicy.location?.latitude ?? '')}" required /></label><label>Bujur kantor<input type="number" step="any" name="longitude" value="${safe(attendancePolicy.location?.longitude ?? '')}" required /></label></div><div class="dialog-two"><label>Radius kantor (meter)<input type="number" name="radius" min="20" max="5000" value="${safe(attendancePolicy.location?.radius_m || attendancePolicy.location?.radiusM || 150)}" required /></label><label>Nama shift<input name="shiftName" value="${safe(assignedShift?.name || attendancePolicy.shifts?.[0]?.name || 'Shift Pagi')}" required /></label></div><div class="dialog-two"><label>Mulai shift<input type="time" name="startTime" value="${safe(String(assignedShift?.start_time || attendancePolicy.shifts?.[0]?.start_time || '09:00').slice(0,5))}" required /></label><label>Selesai shift<input type="time" name="endTime" value="${safe(String(assignedShift?.end_time || attendancePolicy.shifts?.[0]?.end_time || '17:00').slice(0,5))}" required /></label></div><div class="dialog-two"><label>Toleransi terlambat (menit)<input type="number" name="tolerance" min="0" max="240" value="${safe(assignedShift?.tolerance_minutes || 15)}" /></label><label>Tetapkan shift kepada karyawan<select name="employeeId" required>${employeeData.map(person=>`<option value="EMP-${getEmployeeId(person)}">${safe(person[0])} Â· ${safe(person[2])}</option>`).join('')}</select></label></div><button class="module-button primary" type="submit">Simpan Kebijakan</button><small>Perubahan lokasi dan shift hanya tersimpan di Supabase saat terhubung. Atasan dapat menetapkan shift untuk karyawan di departemennya.</small></form></details>` : ''}
       ${userProfile.role === 'Supervisor' ? `<details class="module-card attendance-policy-admin"><summary>Tetapkan Shift Tim</summary><form data-attendance-assignment><label>Karyawan<select name="employeeId" required><option value="__department__">Seluruh tim ? ${safe(userProfile.department)}</option>${employeeData.filter(person=>person[2]===userProfile.department).map(person=>`<option value="EMP-${getEmployeeId(person)}">${safe(person[0])}</option>`).join('')}</select></label><label>Shift<select name="shiftId" required>${(attendancePolicy.shifts||[]).map(shift=>`<option value="${safe(shift.id)}">${safe(shift.name)} ? ${safe(String(shift.start_time).slice(0,5))}?${safe(String(shift.end_time).slice(0,5))}</option>`).join('')}</select></label><button class="module-button primary" type="submit">Simpan Penugasan</button></form></details>` : ''}
-      ${(isAdmin() || userProfile.role === 'Supervisor') ? `<section class="module-card attendance-review-panel"><div class="module-card-head"><h2>Persetujuan Absensi</h2><span class="toolbar-note">${attendanceReviewQueue.corrections.length} koreksi · ${attendanceReviewQueue.overtime.length} lembur</span></div>${attendanceReviewQueue.corrections.map(request=>`<article class="attendance-review-item"><span><strong>${safe(request.attendance_records?.employee_name || 'Karyawan')}</strong><small>Koreksi: ${safe(JSON.stringify(request.requested_values || {}))} · ${safe(request.reason)}</small></span><button class="module-button secondary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="rejected">Tolak</button><button class="module-button primary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="approved">Setujui</button></article>`).join('')}${attendanceReviewQueue.overtime.map(record=>`<article class="attendance-review-item"><span><strong>${safe(record.employee_name)} · ${safe(record.date)}</strong><small>Lembur ${safe(record.overtime)}</small></span><button class="module-button secondary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="false">Tolak</button><button class="module-button primary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="true">Setujui</button></article>`).join('')}${!attendanceReviewQueue.corrections.length && !attendanceReviewQueue.overtime.length ? '<p class="dialog-desc">Tidak ada koreksi atau lembur yang menunggu persetujuan.</p>' : ''}</section>` : ''}
+      ${(isAdmin() || userProfile.role === 'Supervisor') ? `<section class="module-card attendance-review-panel"><div class="module-card-head"><h2>Persetujuan Absensi</h2><span class="toolbar-note">${attendanceReviewQueue.corrections.length} koreksi Â· ${attendanceReviewQueue.overtime.length} lembur</span></div>${attendanceReviewQueue.corrections.map(request=>`<article class="attendance-review-item"><span><strong>${safe(request.attendance_records?.employee_name || 'Karyawan')}</strong><small>Koreksi: ${safe(JSON.stringify(request.requested_values || {}))} Â· ${safe(request.reason)}</small></span><button class="module-button secondary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="rejected">Tolak</button><button class="module-button primary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="approved">Setujui</button></article>`).join('')}${attendanceReviewQueue.overtime.map(record=>`<article class="attendance-review-item"><span><strong>${safe(record.employee_name)} Â· ${safe(record.date)}</strong><small>Lembur ${safe(record.overtime)}</small></span><button class="module-button secondary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="false">Tolak</button><button class="module-button primary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="true">Setujui</button></article>`).join('')}${!attendanceReviewQueue.corrections.length && !attendanceReviewQueue.overtime.length ? '<p class="dialog-desc">Tidak ada koreksi atau lembur yang menunggu persetujuan.</p>' : ''}</section>` : ''}
       ${section('Daftar Kehadiran', `
         <div class="module-toolbar">
-          <label class="module-search">⌕ <input data-filter="attendance" placeholder="Cari karyawan" /></label>
+          <label class="module-search">âŒ• <input data-filter="attendance" placeholder="Cari karyawan" /></label>
           <div class="filter-dropdown-wrap">
-            <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'Semua Status'} <span>⌄</span></button>
+            <button class="date-filter" data-action="attendance-filter" id="attendanceFilterBtn">${moduleView?.dataset?.attFilter || 'Semua Status'} <span>âŒ„</span></button>
             <div class="filter-dropdown-menu" id="attendanceFilterDropdown" style="display:none">
               <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Semua Status">Semua Status</button>
               <button type="button" class="filter-opt-btn" data-action="set-att-filter" data-status="Tepat Waktu">Tepat Waktu</button>
@@ -1793,14 +1914,14 @@ function pageMarkup(key) {
           <table class="module-table attendance-full-table">
             <thead>
               <tr>
-                <th class="sortable" data-col="0">Nama ↕</th>
-                <th class="sortable" data-col="1">Jabatan ↕</th>
-                <th class="sortable" data-col="2">Tanggal ↕</th>
-                <th class="sortable" data-col="3">Model Kerja ↕</th>
-                <th class="sortable" data-col="4">Masuk - Pulang ↕</th>
-                <th class="sortable" data-col="5">Durasi Bersih ↕</th>
-                <th class="sortable" data-col="6">Lembur ↕</th>
-                <th class="sortable" data-col="7">Status ↕</th>
+                <th class="sortable" data-col="0">Nama â†•</th>
+                <th class="sortable" data-col="1">Jabatan â†•</th>
+                <th class="sortable" data-col="2">Tanggal â†•</th>
+                <th class="sortable" data-col="3">Model Kerja â†•</th>
+                <th class="sortable" data-col="4">Masuk - Pulang â†•</th>
+                <th class="sortable" data-col="5">Durasi Bersih â†•</th>
+                <th class="sortable" data-col="6">Lembur â†•</th>
+                <th class="sortable" data-col="7">Status â†•</th>
               </tr>
             </thead>
             <tbody>${attendanceRows}</tbody>
@@ -1808,7 +1929,7 @@ function pageMarkup(key) {
         </div>
         <div class="pagination-row">
           <label>Show <select><option>10</option></select> of ${allAttendanceItems.length} results</label>
-          <div><button>‹</button><button class="page-current">1</button><button>2</button><button>›</button></div>
+          <div><button>â€¹</button><button class="page-current">1</button><button>2</button><button>â€º</button></div>
         </div>
       `)}
     `;
@@ -1819,14 +1940,14 @@ function pageMarkup(key) {
     return `
       <div class="performance-top-grid">
         ${section('Team Performance', `<div class="team-bars">${['Jan','Feb','Mar','Apr','May','Jun'].map((m, i) => `<span><b>${78 + i * 2}%</b><i style="height:${65 + i * 4}%"></i><small>${m}</small></span>`).join('')}</div>`)}
-        ${section('Performance by Category', `<div class="category-bars">${[['Team Work','90%'],['Work Quality','86%'],['Problem-Solving','82%'],['Time Management','76%']].map(([name, val]) => `<div><span>${name}<b>4.5/5 — ${val}</b></span><i></i></div>`).join('')}</div>`)}
-        ${section('Average Performance', '<div class="performance-gauge"><strong>87.5%</strong><small>Total Score</small><b>↗ +3.8%</b></div>')}
+        ${section('Performance by Category', `<div class="category-bars">${[['Team Work','90%'],['Work Quality','86%'],['Problem-Solving','82%'],['Time Management','76%']].map(([name, val]) => `<div><span>${name}<b>4.5/5 â€” ${val}</b></span><i></i></div>`).join('')}</div>`)}
+        ${section('Average Performance', '<div class="performance-gauge"><strong>87.5%</strong><small>Total Score</small><b>â†— +3.8%</b></div>')}
       </div>
       <div class="performance-lower-grid">
         ${section('Employee Performance', `
           <div class="module-toolbar">
             <select><option>This Month</option><option>Last Month</option></select>
-            <button class="module-button primary" data-action="create-review" style="margin-left:auto">＋ New Review Cycle</button>
+            <button class="module-button primary" data-action="create-review" style="margin-left:auto">ï¼‹ New Review Cycle</button>
           </div>
           <div class="module-table-wrap">
             <table class="module-table">
@@ -1835,7 +1956,7 @@ function pageMarkup(key) {
             </table>
           </div>
         `)}
-        ${reviewCycleData.length ? section('Periode Penilaian', `<div class="performer-list">${reviewCycleData.map(cycle => `<p><span><strong>${safe(cycle.name)}</strong><small>${safe(cycle.type)} · Dibuat ${safe(cycle.createdAt)}</small></span><b>${safe(cycle.status)}</b></p>`).join('')}</div>`) : ''}
+        ${reviewCycleData.length ? section('Periode Penilaian', `<div class="performer-list">${reviewCycleData.map(cycle => `<p><span><strong>${safe(cycle.name)}</strong><small>${safe(cycle.type)} Â· Dibuat ${safe(cycle.createdAt)}</small></span><b>${safe(cycle.status)}</b></p>`).join('')}</div>`) : ''}
         <aside>
           ${section('Top Performers', `<div class="performer-list">${employeeData.slice(0, 5).map((p, i) => `<p>${avatar(p[0], `p${i + 1}`)}<span><strong>${p[0]}</strong><small>${p[3]}</small></span><b>${92 - i}/100</b></p>`).join('')}</div>`)}
           ${section('Time Management Alerts', `<div class="performer-list">${employeeData.slice(2, 5).map((p) => `<p>${avatar(p[0], 'p3')}<span><strong>${p[0]}</strong><small>Low on-time rate for deliverables this month.</small></span></p>`).join('')}</div>`)}
@@ -1868,21 +1989,21 @@ function pageMarkup(key) {
           <strong class="payroll-breakdown-total">${formatIDR(378300)} <small>Total Pay This Month</small></strong>
           <div class="payroll-breakdown-bar"></div>
           <div class="payroll-legend">
-            <span>Salary · 89.0%<small>${formatIDR(352000)}</small></span>
-            <span>Allowances · 3.8%<small>${formatIDR(15000)}</small></span>
-            <span>Deductions · 4.0%<small>${formatIDR(16200)}</small></span>
-            <span>Incentives · 2.0%<small>${formatIDR(7900)}</small></span>
-            <span>Overtime · 1.2%<small>${formatIDR(4800)}</small></span>
+            <span>Salary Â· 89.0%<small>${formatIDR(352000)}</small></span>
+            <span>Allowances Â· 3.8%<small>${formatIDR(15000)}</small></span>
+            <span>Deductions Â· 4.0%<small>${formatIDR(16200)}</small></span>
+            <span>Incentives Â· 2.0%<small>${formatIDR(7900)}</small></span>
+            <span>Overtime Â· 1.2%<small>${formatIDR(4800)}</small></span>
           </div>
         `)}
       </div>
       ${section('Payroll List', `
         <div class="module-toolbar">
-          <label class="module-search">⌕ <input data-filter="payroll" placeholder="Search employee, ID, etc" /></label>
-          <button class="date-filter" data-action="payroll-filter">Filter <span>⌄</span></button>
+          <label class="module-search">âŒ• <input data-filter="payroll" placeholder="Search employee, ID, etc" /></label>
+          <button class="date-filter" data-action="payroll-filter">Filter <span>âŒ„</span></button>
           <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
-            <button class="module-button primary" data-action="new-payrun">＋ New Pay Run</button>
-            <button class="module-button secondary" data-action="export-payroll">⇩ Export report</button>
+            <button class="module-button primary" data-action="new-payrun">ï¼‹ New Pay Run</button>
+            <button class="module-button secondary" data-action="export-payroll">â‡© Export report</button>
           </div>
         </div>
         <div class="module-table-wrap">
@@ -1920,7 +2041,7 @@ function pageMarkup(key) {
           <label>Menampilkan ${employeeData.length} data penggajian</label>
         </div>
       `)}
-      ${payRunData.length ? section('Riwayat Persiapan Gaji', `<div class="performer-list">${payRunData.map(run => `<p><span><strong>${safe(run.period)}</strong><small>Tanggal pembayaran ${safe(run.paymentDate)} · ${run.employeeCount} karyawan · Total ${formatIDR(run.total)}</small></span><b>${safe(run.status)}</b></p>`).join('')}</div>`) : ''}
+      ${payRunData.length ? section('Riwayat Persiapan Gaji', `<div class="performer-list">${payRunData.map(run => `<p><span><strong>${safe(run.period)}</strong><small>Tanggal pembayaran ${safe(run.paymentDate)} Â· ${run.employeeCount} karyawan Â· Total ${formatIDR(run.total)}</small></span><b>${safe(run.status)}</b></p>`).join('')}</div>`) : ''}
     `;
   }
 
@@ -1939,10 +2060,10 @@ function pageMarkup(key) {
       </div>
       ${section('Leave Activity & Approval', `
         <div class="module-toolbar">
-          <label class="module-search">⌕ <input data-filter="leave" placeholder="Search employee, reason, etc" /></label>
-          <button class="date-filter" data-action="leave-filter">Filter <span>⌄</span></button>
+          <label class="module-search">âŒ• <input data-filter="leave" placeholder="Search employee, reason, etc" /></label>
+          <button class="date-filter" data-action="leave-filter">Filter <span>âŒ„</span></button>
           <div class="module-toolbar-actions" style="margin-left:auto; display:flex; gap:8px;">
-            <button class="module-button primary" data-action="request-leave">＋ Request Leave</button>
+            <button class="module-button primary" data-action="request-leave">ï¼‹ Request Leave</button>
           </div>
         </div>
         <div class="module-table-wrap">
@@ -2026,7 +2147,7 @@ function pageMarkup(key) {
             <section class="module-card recruitment-chart-card">
               <div class="module-card-head">
                 <h2>Application</h2>
-                <button class="date-filter">Last 6 Months ⌄</button>
+                <button class="date-filter">Last 6 Months âŒ„</button>
               </div>
               <div class="application-trend-wrap">
                 <div class="trend-y-axis">
@@ -2059,7 +2180,7 @@ function pageMarkup(key) {
             <section class="module-card vacancies-card">
               <div class="module-card-head">
                 <h2>Current Vacancies</h2>
-                <button class="date-filter">Filter ⌄</button>
+                <button class="date-filter">Filter âŒ„</button>
               </div>
               <div class="vacancy-grid">
                 <article class="vacancy-box">
@@ -2100,7 +2221,7 @@ function pageMarkup(key) {
             <section class="module-card department-app-card">
               <div class="module-card-head">
                 <h2>Application by Department</h2>
-                <button class="kebab">···</button>
+                <button class="kebab">Â·Â·Â·</button>
               </div>
               <div class="department-bars">
                 ${[['Human Resources',19],['Marketing',27],['Product Design',31],['R&D',22],['Operations',28],['Customer Service',19]].map(([n,v], idx) => `
@@ -2124,8 +2245,8 @@ function pageMarkup(key) {
               </div>
             </div>
             <div class="module-toolbar">
-              <label class="module-search">⌕ <input data-filter="recruitment" placeholder="Search applicant" /></label>
-              <button class="module-button primary" data-action="add-candidate">＋ Add Applicant</button>
+              <label class="module-search">âŒ• <input data-filter="recruitment" placeholder="Search applicant" /></label>
+              <button class="module-button primary" data-action="add-candidate">ï¼‹ Add Applicant</button>
             </div>
             <div class="module-table-wrap">
               <table class="module-table applicants-table">
@@ -2198,7 +2319,7 @@ function pageMarkup(key) {
           <section class="module-card">
             <div class="module-card-head">
               <h2>Applicant Resources</h2>
-              <button class="kebab">···</button>
+              <button class="kebab">Â·Â·Â·</button>
             </div>
             <div class="resource-bars">
               <div class="resource-row">
@@ -2226,13 +2347,13 @@ function pageMarkup(key) {
           <section class="module-card">
             <div class="module-card-head">
               <h2>Schedules</h2>
-              <button class="kebab">···</button>
+              <button class="kebab">Â·Â·Â·</button>
             </div>
             <div class="mini-schedule-box">
               <div class="mini-schedule-head">
-                <button class="cal-nav-btn">‹</button>
+                <button class="cal-nav-btn">â€¹</button>
                 <strong>June 2035</strong>
-                <button class="cal-nav-btn">›</button>
+                <button class="cal-nav-btn">â€º</button>
               </div>
               <div class="mini-weekdays-row">
                 <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
@@ -2248,7 +2369,7 @@ function pageMarkup(key) {
                 <div class="event-info">
                   <small>09:45 AM</small>
                   <strong>Online Test Review</strong>
-                  <span>Lala Wijaya • Data Analyst</span>
+                  <span>Lala Wijaya â€¢ Data Analyst</span>
                 </div>
               </article>
               <article class="rec-event-item">
@@ -2256,7 +2377,7 @@ function pageMarkup(key) {
                 <div class="event-info">
                   <small>01:00 PM</small>
                   <strong>First Interview</strong>
-                  <span>William Hartono • UI Designer</span>
+                  <span>William Hartono â€¢ UI Designer</span>
                 </div>
               </article>
               <article class="rec-event-item">
@@ -2264,7 +2385,7 @@ function pageMarkup(key) {
                 <div class="event-info">
                   <small>02:30 PM</small>
                   <strong>HR Interview</strong>
-                  <span>Arifin Maulana • Customer Support</span>
+                  <span>Arifin Maulana â€¢ Customer Support</span>
                 </div>
               </article>
               <article class="rec-event-item">
@@ -2272,7 +2393,7 @@ function pageMarkup(key) {
                 <div class="event-info">
                   <small>03:10 PM</small>
                   <strong>Final Interview</strong>
-                  <span>Fanny Rizal • Sales Manager</span>
+                  <span>Fanny Rizal â€¢ Sales Manager</span>
                 </div>
               </article>
             </div>
@@ -2317,11 +2438,11 @@ function pageMarkup(key) {
 
     // Role badge color
     const roleBadgeClass = isAdminUser ? 'role-badge-admin' : 'role-badge-supervisor';
-    const roleLabel = isAdminUser ? 'Administrator' : `Supervisor — ${safe(account.department)}`;
+    const roleLabel = isAdminUser ? 'Administrator' : `Supervisor â€” ${safe(account.department)}`;
 
     // Active account switcher options
     const accountOptions = userAccounts.filter(u => u.status === 'Active').map(u =>
-      `<option value="${u.id}" ${u.id === activeAccountId ? 'selected' : ''}>${safe(u.name)} (${u.role}${u.role === 'Supervisor' ? ' — ' + u.department : ''})</option>`
+      `<option value="${u.id}" ${u.id === activeAccountId ? 'selected' : ''}>${safe(u.name)} (${u.role}${u.role === 'Supervisor' ? ' â€” ' + u.department : ''})</option>`
     ).join('');
 
     // User management tab content (admin only)
@@ -2382,10 +2503,10 @@ function pageMarkup(key) {
             <div class="module-card-head">
               <div>
                 <h2>Daftar Akun Pengguna &amp; Role Supervisor</h2>
-                <p style="margin:2px 0 0;font-size:12px;color:#64748b">Kelola akun, role (Admin/Supervisor), dan pembagian divisi untuk setiap supervisor.</p>
+                <p style="margin:2px 0 0;font-size:12px;color:#64748b">Kelola akun Admin, Atasan, dan Karyawan. Karyawan ditautkan melalui email kantor.</p>
               </div>
               <div class="module-heading-actions">
-                <button class="module-button primary" data-action="new-user-account">＋ Tambah Akun Baru</button>
+                <button class="module-button primary" data-action="new-user-account">ï¼‹ Tambah Akun Baru</button>
               </div>
             </div>
 
@@ -2413,15 +2534,20 @@ function pageMarkup(key) {
                         </div>
                       </td>
                       <td><span style="color:#475569;font-size:12.5px">${safe(u.email)}</span></td>
-                      <td><span class="status ${u.role === 'Admin' ? 'ontime' : 'leave'}">${safe(u.role)}</span></td>
+                      <td><span class="status ${u.role === 'Admin' ? 'ontime' : 'leave'}">${safe(roleLabel(u.role))}</span></td>
                       <td><strong style="font-size:13px">${safe(u.department)}</strong></td>
-                      <td><span style="color:#475569;font-size:12.5px">${safe(u.title || '—')}</span></td>
-                      <td><span class="status ${u.status === 'Active' ? 'ontime' : 'late'}">${safe(u.status)}</span></td>
-                      <td><span style="color:#64748b;font-size:12px">${safe(u.lastLogin || '—')}</span></td>
+                      <td><span style="color:#475569;font-size:12.5px">${safe(u.title || 'â€”')}</span></td>
+                      <td><span class="status ${u.status === 'Active' ? 'ontime' : u.status === 'Pending' ? 'leave' : 'late'}">${safe(u.status === 'Pending' ? 'Menunggu aktivasi' : u.status === 'Inactive' ? 'Nonaktif' : 'Aktif')}</span></td>
+                      <td><span style="color:#64748b;font-size:12px">${safe(u.lastLogin || 'â€”')}</span></td>
                       <td>
                         <div class="row-actions-group">
                           <button class="btn-action-icon" data-action="edit-user-account" data-id="${u.id}" title="Edit Akun Pengguna"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
-                          ${u.id !== 'usr-admin' ? `<button class="btn-action-icon danger" data-action="delete-user-account" data-id="${u.id}" title="Hapus Akun"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>` : ''}
+                          ${u.status === 'Pending' ? `<button class="btn-action-icon" data-action="resend-invite-user" data-id="${u.id}" data-email="${safe(u.email)}" title="Kirim Ulang Undangan Email"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>` : ''}
+                          <button class="btn-action-icon" data-action="reset-password-user" data-id="${u.id}" data-email="${safe(u.email)}" title="Kirim Email Reset Kata Sandi"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
+                          ${u.id !== 'usr-admin' && u.id !== authenticatedSupabaseSession?.user?.id ? `
+                            <button class="btn-action-icon ${u.status === 'Inactive' ? 'success' : 'warning'}" data-action="toggle-status-user" data-id="${u.id}" title="${u.status === 'Inactive' ? 'Aktifkan Akun' : 'Nonaktifkan Akun'}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></button>
+                            <button class="btn-action-icon danger" data-action="delete-user-account" data-id="${u.id}" title="Hapus Permanen Akun"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+                          ` : ''}
                         </div>
                       </td>
                     </tr>
@@ -2470,7 +2596,7 @@ function pageMarkup(key) {
                 <p style="margin:2px 0 0;font-size:12px;color:#64748b">Kelola struktur departemen, penanggung jawab/kepala divisi, alokasi anggaran, dan target pencapaian.</p>
               </div>
               <div class="module-heading-actions">
-                <button class="module-button primary" data-action="new-division">＋ Tambah Divisi Baru</button>
+                <button class="module-button primary" data-action="new-division">ï¼‹ Tambah Divisi Baru</button>
               </div>
             </div>
 
@@ -2526,7 +2652,7 @@ function pageMarkup(key) {
             <div class="supervisor-scope-banner">
               
               <div>
-                <strong>Mode Supervisor — Divisi: ${safe(supervisorDept)}</strong>
+                <strong>Mode Supervisor â€” Divisi: ${safe(supervisorDept)}</strong>
                 <p>Anda hanya melihat target KPI yang terkait dengan divisi ${safe(supervisorDept)}. Untuk melihat seluruh data, masuk sebagai Administrator.</p>
               </div>
             </div>
@@ -2584,14 +2710,14 @@ function pageMarkup(key) {
             <div class="module-card-head">
               <h2>Daftar Target &amp; Indikator Kinerja (KPI)</h2>
               <div class="module-heading-actions">
-                <label class="module-search">⌕ <input data-filter="kpi" id="kpiSearchInput" placeholder="Cari indikator KPI, PIC, atau divisi..." /></label>
+                <label class="module-search">âŒ• <input data-filter="kpi" id="kpiSearchInput" placeholder="Cari indikator KPI, PIC, atau divisi..." /></label>
                 ${!supervisorDept ? `<div class="filter-dropdown-wrap">
-                  <button class="date-filter" data-action="kpi-dept-filter" id="kpiDeptFilterBtn">${moduleView.dataset.kpiDeptFilter || 'Semua Divisi'} <span>⌄</span></button>
+                  <button class="date-filter" data-action="kpi-dept-filter" id="kpiDeptFilterBtn">${moduleView.dataset.kpiDeptFilter || 'Semua Divisi'} <span>âŒ„</span></button>
                 </div>` : ''}
                 <div class="filter-dropdown-wrap">
-                  <button class="date-filter" data-action="kpi-status-filter" id="kpiStatusFilterBtn">${moduleView.dataset.kpiStatusFilter || 'Semua Status'} <span>⌄</span></button>
+                  <button class="date-filter" data-action="kpi-status-filter" id="kpiStatusFilterBtn">${moduleView.dataset.kpiStatusFilter || 'Semua Status'} <span>âŒ„</span></button>
                 </div>
-                ${isAdminUser ? `<button class="module-button primary" data-action="new-kpi">＋ Tambah KPI Baru</button>` : ''}
+                ${isAdminUser ? `<button class="module-button primary" data-action="new-kpi">ï¼‹ Tambah KPI Baru</button>` : ''}
                 <button class="module-button secondary" data-action="export-kpi">Export Laporan</button>
               </div>
             </div>
@@ -2600,14 +2726,14 @@ function pageMarkup(key) {
               <table class="module-table kpi-table">
                 <thead>
                   <tr>
-                    <th class="sortable" data-col="0">Indikator KPI ↕</th>
-                    <th class="sortable" data-col="1">Departemen &amp; PIC ↕</th>
-                    <th class="sortable" data-col="2">Periode ↕</th>
-                    <th class="sortable" data-col="3">Bobot ↕</th>
-                    <th class="sortable" data-col="4">Target ↕</th>
-                    <th class="sortable" data-col="5">Realisasi ↕</th>
-                    <th class="sortable" data-col="6">Capaian (%) ↕</th>
-                    <th class="sortable" data-col="7">Status ↕</th>
+                    <th class="sortable" data-col="0">Indikator KPI â†•</th>
+                    <th class="sortable" data-col="1">Departemen &amp; PIC â†•</th>
+                    <th class="sortable" data-col="2">Periode â†•</th>
+                    <th class="sortable" data-col="3">Bobot â†•</th>
+                    <th class="sortable" data-col="4">Target â†•</th>
+                    <th class="sortable" data-col="5">Realisasi â†•</th>
+                    <th class="sortable" data-col="6">Capaian (%) â†•</th>
+                    <th class="sortable" data-col="7">Status â†•</th>
                     <th style="min-width:115px">Aksi</th>
                   </tr>
                 </thead>
@@ -2632,7 +2758,7 @@ function pageMarkup(key) {
                       <td><span class="period-pill">${safe(k.period)}</span></td>
                       <td><strong>${k.weight}%</strong></td>
                       <td><span style="font-weight:600;color:#334155">${k.target} ${safe(k.unit)}</span></td>
-                      <td><span style="font-weight:700;color:#0962ea">${k.actual !== undefined ? k.actual : '—'} ${safe(k.unit)}</span></td>
+                      <td><span style="font-weight:700;color:#0962ea">${k.actual !== undefined ? k.actual : 'â€”'} ${safe(k.unit)}</span></td>
                       <td>
                         <div class="kpi-progress-cell">
                           <div class="kpi-progress-val"><b>${k.score}%</b></div>
@@ -2737,6 +2863,22 @@ function resolveRoute(hashString = window.location.hash) {
 }
 
 function openModule(key, updateUrl = true, params = null) {
+  if (authenticatedSupabaseSession && authenticatedUserProfile) {
+    const role = authenticatedUserProfile.role;
+    const allowed = role === 'Admin'
+      ? null
+      : role === 'Supervisor'
+      ? new Set(['dashboard','calendar','employees','employee-grid','employee-details','attendance','performance','kpi','leave'])
+        : new Set(['dashboard','calendar','employees','employee-grid','employee-details','attendance','leave']);
+    if (role === 'Employee' && ['employees','employee-grid'].includes(key)) {
+      const own = employeeData.find(row => row[5] === authenticatedUserProfile.employee_id || `EMP-${getEmployeeId(row)}` === authenticatedUserProfile.employee_id);
+      if (own) { selectedEmployeeName = own[0]; key = 'employee-details'; }
+    }
+    if (allowed && !allowed.has(key)) {
+      showToast('Menu ini tidak tersedia untuk peran akun Anda.');
+      key = 'dashboard';
+    }
+  }
   if (!key.startsWith('employee')) employeeCurrentPage = 1;
   const selectedNav = key.startsWith('employee') ? 'employees' : key;
   
@@ -2798,7 +2940,7 @@ function openModule(key, updateUrl = true, params = null) {
     }
 
     if (key !== 'inbox') {
-      moduleView.insertAdjacentHTML('beforeend', '<footer class="page-footer"><strong>Copyright © 2025 Kharisma Group</strong><a href="#privacy">Privacy Policy</a><a href="#terms">Term and conditions</a><a href="#contact">Contact</a><span></span><span class="socials"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733-16z"/><path d="M4 20l6.768-6.768m2.464-2.464L20 4"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg></span></footer>');
+      moduleView.insertAdjacentHTML('beforeend', '<footer class="page-footer"><strong>Copyright Â© 2025 Kharisma Group</strong><a href="#privacy">Privacy Policy</a><a href="#terms">Term and conditions</a><a href="#contact">Contact</a><span></span><span class="socials"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733-16z"/><path d="M4 20l6.768-6.768m2.464-2.464L20 4"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg></span></footer>');
     }
 
     moduleView.dataset.page = key;
@@ -2893,7 +3035,7 @@ function openModule(key, updateUrl = true, params = null) {
       greeting.innerHTML = '<strong>Inbox</strong><small>Dashboard / Inbox</small>';
       renderInboxPage();
     } else if (key === 'employee-details') {
-      greeting.innerHTML = '<button class="employee-detail-back" data-action="back-employees" aria-label="Back to employees">←</button><span><strong>Employee Details</strong><small>Dashboard / Employees / ' + safe(selectedEmployeeName) + '</small></span>';
+      greeting.innerHTML = '<button class="employee-detail-back" data-action="back-employees" aria-label="Back to employees">â†</button><span><strong>Employee Details</strong><small>Dashboard / Employees / ' + safe(selectedEmployeeName) + '</small></span>';
     } else {
       greeting.innerHTML = `<strong>${safe(moduleTitles[key][0])}</strong><small>Dashboard / ${safe(moduleTitles[key][0])}</small>`;
     }
@@ -2936,7 +3078,7 @@ function openPayslipModal(employeeName) {
           <img src="./LogoKharismaGroup.png" alt="Kharisma Group" style="height:52px;max-width:170px;object-fit:contain;flex-shrink:0;" />
           <div>
             <strong style="color:#0c1e36;font-size:13.5px;letter-spacing:-0.2px;">${safe(appSettings.companyName)}</strong>
-            <p style="margin:2px 0 0;font-size:9.5px;color:#64748b">Kharisma Tower Lt. 18, Jl. Gatot Subroto Kav. 52, Jakarta Selatan · NPWP: 01.345.678.9-021.000</p>
+            <p style="margin:2px 0 0;font-size:9.5px;color:#64748b">Kharisma Tower Lt. 18, Jl. Gatot Subroto Kav. 52, Jakarta Selatan Â· NPWP: 01.345.678.9-021.000</p>
           </div>
         </div>
         <div class="payslip-title">
@@ -3120,7 +3262,7 @@ function renderMailList() {
           <small>${safe(mail.preview)}</small>
         </span>
       </button>
-      <button class="mail-star ${mail.starred ? 'starred' : ''}" data-action="toggle-star" data-id="${mail.id}">☆</button>
+      <button class="mail-star ${mail.starred ? 'starred' : ''}" data-action="toggle-star" data-id="${mail.id}">â˜†</button>
     </article>
   `).join('') : '<div class="mail-empty">Tidak ada pesan di folder ini.</div>';
 }
@@ -3141,8 +3283,8 @@ function renderMailReader() {
         <small>${safe(mail.email)}</small>
       </div>
       <time>${safe(mail.date)} - ${safe(mail.time)}</time>
-      <button data-action="reply-message">↶ &nbsp;Reply</button>
-      <button data-action="forward-message">↗ &nbsp;Forward</button>
+      <button data-action="reply-message">â†¶ &nbsp;Reply</button>
+      <button data-action="forward-message">â†— &nbsp;Forward</button>
     </div>
     <h2 class="mail-subject">${safe(mail.subject)}</h2>
     <div class="mail-body">${mail.body.map((line) => `<p>${safe(line)}</p>`).join('')}</div>
@@ -3264,7 +3406,7 @@ window.addEventListener('kharisma:supabase-status', (e) => {
   if (badge && text) {
     badge.className = `cloud-badge ${isConnected ? 'connected' : 'local'}`;
     text.textContent = isConnected ? 'Cloud Aktif' : 'Mode Lokal';
-    badge.title = isConnected ? `Supabase Cloud Aktif: ${message}` : 'Mode Lokal — Klik untuk menyambungkan Supabase';
+    badge.title = isConnected ? `Supabase Cloud Aktif: ${message}` : 'Mode Lokal â€” Klik untuk menyambungkan Supabase';
   }
   if (help) {
     help.textContent = `Status: ${message}`;
@@ -3567,7 +3709,7 @@ function updateEmployeeDatalist() {
     list.id = 'employeeNameList';
     document.body.appendChild(list);
   }
-  list.innerHTML = employeeData.map(p => `<option value="${safe(p[0])}">${safe(p[3])} — ${safe(p[2])}</option>`).join('');
+  list.innerHTML = employeeData.map(p => `<option value="${safe(p[0])}">${safe(p[3])} â€” ${safe(p[2])}</option>`).join('');
   document.querySelectorAll('input[name="pic"], input[name="head"], #userAccountForm input[name="name"], #editUserAccountForm input[name="name"]').forEach(inp => {
     inp.setAttribute('list', 'employeeNameList');
     inp.setAttribute('autocomplete', 'off');
@@ -3765,7 +3907,7 @@ document.querySelector('#userAccountForm')?.addEventListener('submit', (event) =
   const data = new FormData(form);
   const name = (data.get('name') || '').trim();
   const email = (data.get('email') || '').trim();
-  const role = data.get('role') || 'Supervisor';
+  const role = data.get('role') || 'Employee';
   const department = data.get('department');
   const title = (data.get('title') || '').trim();
 
@@ -3780,7 +3922,7 @@ document.querySelector('#userAccountForm')?.addEventListener('submit', (event) =
     submit.disabled = true;
     window.KharismaAuth.adminRequest('POST', { name, email, role, department, title })
       .then(({ data: invited }) => {
-        userAccounts.push({ id: invited.id, name, email, role, department, title, status: 'Active', avatar: 'men/32', lastLogin: 'Undangan dikirim' });
+        userAccounts.push({ id: invited.id, name, email, role, department: invited.department || department, title: invited.title || title, employeeId: invited.employee_id || '', status: invited.status || 'Pending', avatar: 'men/32', lastLogin: 'Undangan dikirim' });
         form.reset(); document.querySelector('#userAccountDialog')?.close(); openModule('kpi');
         showToast(`Undangan login berhasil dikirim ke ${email}. Pengguna perlu mengatur kata sandi melalui email.`);
       })
@@ -3798,7 +3940,7 @@ document.querySelector('#userAccountForm')?.addEventListener('submit', (event) =
     title,
     status: 'Active',
     avatar: `${Math.random() > 0.5 ? 'women' : 'men'}/${Math.floor(Math.random() * 90) + 10}`,
-    lastLogin: '—'
+    lastLogin: 'â€”'
   };
 
   userAccounts.push(newAccount);
@@ -3812,7 +3954,7 @@ document.querySelector('#userAccountForm')?.addEventListener('submit', (event) =
   form.reset();
   document.querySelector('#userAccountDialog')?.close();
   openModule('kpi');
-  showToast(`Akun pengguna "${name}" (${role}) berhasil dibuat.${empAdded ? ' Ditambahkan juga ke direktori karyawan.' : ''}`);
+  showToast(`Akun demo "${name}" (${roleLabel(role)}) berhasil dibuat.${empAdded ? ' Ditambahkan juga ke direktori karyawan.' : ''}`);
 });
 
 // Edit User Account Form Submit
@@ -3874,7 +4016,7 @@ document.querySelector('#editUserAccountForm')?.addEventListener('submit', (even
   }
 });
 
-// Account Switcher — listen for change on the #accountSwitcher select
+// Account Switcher â€” listen for change on the #accountSwitcher select
 document.addEventListener('change', (event) => {
   if (event.target.id === 'accountSwitcher') {
     const newId = event.target.value;
@@ -3890,7 +4032,7 @@ document.addEventListener('change', (event) => {
         moduleView.dataset.kpiTab = 'kpi-indicators';
       }
       openModule('kpi');
-      showToast(`Mode simulasi: ${account.name} (${account.role}${account.role === 'Supervisor' ? ' — ' + account.department : ''})`);
+      showToast(`Mode simulasi: ${account.name} (${account.role}${account.role === 'Supervisor' ? ' â€” ' + account.department : ''})`);
     } else if (account) {
       event.target.value = activeAccountId;
       showToast('Hanya administrator yang dapat mengganti akun simulasi.');
@@ -4167,7 +4309,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.calFilter || 'Semua Kategori';
     const next = categories[(categories.indexOf(cur) + 1) % categories.length];
     moduleView.dataset.calFilter = next;
-    btn.innerHTML = `${next === 'Semua Kategori' ? 'Filter' : next} <span>⌄</span>`;
+    btn.innerHTML = `${next === 'Semua Kategori' ? 'Filter' : next} <span>âŒ„</span>`;
     moduleView.querySelectorAll('.calendar-event').forEach(ev => {
       const title = ev.dataset.title;
       const item = calendarItems.find(c => c.title === title);
@@ -4183,7 +4325,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.calMode || 'Month';
     const next = modes[(modes.indexOf(cur) + 1) % modes.length];
     moduleView.dataset.calMode = next;
-    btn.innerHTML = `${next} <span>⌄</span>`;
+    btn.innerHTML = `${next} <span>âŒ„</span>`;
     showToast(`Mode kalender diubah ke: ${next}`);
     return;
   }
@@ -4355,7 +4497,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.deptFilter || 'Semua Divisi';
     const next = depts[(depts.indexOf(cur) + 1) % depts.length];
     moduleView.dataset.deptFilter = next;
-    btn.textContent = next === 'Semua Divisi' ? 'Filter <span>⌄</span>' : `${next} <span>⌄</span>`;
+    btn.textContent = next === 'Semua Divisi' ? 'Filter <span>âŒ„</span>' : `${next} <span>âŒ„</span>`;
     moduleView.querySelectorAll('.employees-table tbody tr, .employee-cards .employee-card').forEach(row => {
       row.hidden = next !== 'Semua Divisi' && !row.textContent.includes(next);
     });
@@ -4376,7 +4518,7 @@ moduleView.addEventListener('click', async (event) => {
     const status = btn.dataset.status;
     moduleView.dataset.attFilter = status;
     const filterBtn = moduleView.querySelector('#attendanceFilterBtn');
-    if (filterBtn) filterBtn.innerHTML = `${status === 'Semua Status' ? 'Filter' : status} <span>⌄</span>`;
+    if (filterBtn) filterBtn.innerHTML = `${status === 'Semua Status' ? 'Filter' : status} <span>âŒ„</span>`;
     const menu = moduleView.querySelector('#attendanceFilterDropdown');
     if (menu) menu.style.display = 'none';
     moduleView.querySelectorAll('.attendance-full-table tbody tr').forEach(row => {
@@ -4393,7 +4535,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.payFilter || 'Semua';
     const next = statuses[(statuses.indexOf(cur) + 1) % statuses.length];
     moduleView.dataset.payFilter = next;
-    btn.textContent = next === 'Semua' ? 'Filter <span>⌄</span>' : `${next} <span>⌄</span>`;
+    btn.textContent = next === 'Semua' ? 'Filter <span>âŒ„</span>' : `${next} <span>âŒ„</span>`;
     moduleView.querySelectorAll('.payroll-table tbody tr').forEach(row => {
       row.hidden = next !== 'Semua' && !row.textContent.includes(next);
     });
@@ -4407,7 +4549,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.lvFilter || 'Semua';
     const next = statuses[(statuses.indexOf(cur) + 1) % statuses.length];
     moduleView.dataset.lvFilter = next;
-    btn.textContent = next === 'Semua' ? 'Filter <span>⌄</span>' : `${next} <span>⌄</span>`;
+    btn.textContent = next === 'Semua' ? 'Filter <span>âŒ„</span>' : `${next} <span>âŒ„</span>`;
     moduleView.querySelectorAll('.leave-table tbody tr').forEach(row => {
       row.hidden = next !== 'Semua' && !row.textContent.includes(next);
     });
@@ -4500,7 +4642,7 @@ moduleView.addEventListener('click', async (event) => {
       const dialog = document.querySelector('#updateKpiDialog');
       if (dialog) {
         document.querySelector('#updateKpiId').value = kpi.id;
-        document.querySelector('#updateKpiTitleBanner').textContent = `${kpi.title} — Divisi: ${kpi.dept} (PIC: ${kpi.pic})`;
+        document.querySelector('#updateKpiTitleBanner').textContent = `${kpi.title} â€” Divisi: ${kpi.dept} (PIC: ${kpi.pic})`;
         document.querySelector('#updateKpiTargetDisplay').value = `${kpi.target} ${kpi.unit}`;
         document.querySelector('#updateKpiActual').value = kpi.actual !== undefined ? kpi.actual : '';
         const notesEl = dialog.querySelector('[name="notes"]');
@@ -4561,7 +4703,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.kpiDeptFilter || 'Semua Divisi';
     const next = depts[(depts.indexOf(cur) + 1) % depts.length];
     moduleView.dataset.kpiDeptFilter = next;
-    btn.innerHTML = `${next} <span>⌄</span>`;
+    btn.innerHTML = `${next} <span>âŒ„</span>`;
     const statusFilter = moduleView.dataset.kpiStatusFilter || 'Semua Status';
     moduleView.querySelectorAll('.kpi-table tbody tr').forEach(row => {
       const deptMatch = next === 'Semua Divisi' || row.dataset.kpiDept === next;
@@ -4577,7 +4719,7 @@ moduleView.addEventListener('click', async (event) => {
     const cur = moduleView.dataset.kpiStatusFilter || 'Semua Status';
     const next = statuses[(statuses.indexOf(cur) + 1) % statuses.length];
     moduleView.dataset.kpiStatusFilter = next;
-    btn.innerHTML = `${next} <span>⌄</span>`;
+    btn.innerHTML = `${next} <span>âŒ„</span>`;
     const deptFilter = moduleView.dataset.kpiDeptFilter || 'Semua Divisi';
     moduleView.querySelectorAll('.kpi-table tbody tr').forEach(row => {
       const deptMatch = deptFilter === 'Semua Divisi' || row.dataset.kpiDept === deptFilter;
@@ -4602,10 +4744,10 @@ moduleView.addEventListener('click', async (event) => {
         `${k.weight}%`,
         k.target,
         k.unit,
-        k.actual !== undefined ? k.actual : '—',
+        k.actual !== undefined ? k.actual : 'â€”',
         `${scoreFormatted}%`,
         k.status,
-        k.notes || '—'
+        k.notes || 'â€”'
       ];
     });
     downloadCsv('laporan-kpi-kharisma-hub.csv', [headers, ...rows]);
@@ -4621,6 +4763,25 @@ moduleView.addEventListener('click', async (event) => {
       const deptSelect = document.querySelector('#userAcctDept');
       if (deptSelect) {
         deptSelect.innerHTML = departmentsData.map(d => `<option value="${d.name}">${d.name}</option>`).join('');
+      }
+      // Populate employee dropdown for easy selection
+      const empSelect = document.querySelector('#userAcctEmployeeSelect');
+      if (empSelect) {
+        empSelect.innerHTML = '<option value="">-- Pilih karyawan atau isi manual --</option>' +
+          employeeData.map(emp => `<option value="${safe(emp[1])}" data-name="${safe(emp[0])}" data-dept="${safe(emp[2])}" data-title="${safe(emp[3])}">${safe(emp[0])} — ${safe(emp[1])} (${safe(emp[2])})</option>`).join('');
+        empSelect.onchange = () => {
+          const opt = empSelect.options[empSelect.selectedIndex];
+          if (opt && opt.value) {
+            const nameInput = document.querySelector('#userAcctName');
+            const emailInput = document.querySelector('#userAcctEmail');
+            const deptInput = document.querySelector('#userAcctDept');
+            const titleInput = document.querySelector('#userAcctTitle');
+            if (nameInput) nameInput.value = opt.dataset.name || '';
+            if (emailInput) emailInput.value = opt.value;
+            if (deptInput && opt.dataset.dept) deptInput.value = opt.dataset.dept;
+            if (titleInput && opt.dataset.title) titleInput.value = opt.dataset.title;
+          }
+        };
       }
       dialog.showModal();
     }
@@ -4642,38 +4803,109 @@ moduleView.addEventListener('click', async (event) => {
           deptSelect.innerHTML = departmentsData.map(d => `<option value="${d.name}" ${d.name === usr.department ? 'selected' : ''}>${d.name}</option>`).join('');
         }
         document.querySelector('#editUserAcctTitle').value = usr.title || '';
-        document.querySelector('#editUserAcctStatus').value = usr.status;
+        document.querySelector('#editUserAcctStatus').value = usr.status || 'Active';
         dialog.showModal();
       }
     }
     return;
   }
 
+  if (action === 'resend-invite-user') {
+    const email = btn.dataset.email;
+    if (!email) return;
+    if (authenticatedSupabaseSession) {
+      if (!isAdmin()) return showToast('Hanya administrator yang dapat mengirim ulang undangan.');
+      btn.disabled = true;
+      window.KharismaAuth.adminRequest('POST', { action: 'resend_invite', email })
+        .then(res => showToast(res.message || `Undangan login telah dikirim ulang ke ${email}.`))
+        .catch(err => showToast(`Gagal: ${err.message}`))
+        .finally(() => { btn.disabled = false; });
+    } else {
+      showToast(`(Mode Demo) Undangan simulasi dikirim ulang ke ${email}.`);
+    }
+    return;
+  }
+
+  if (action === 'reset-password-user') {
+    const email = btn.dataset.email;
+    if (!email) return;
+    if (!confirm(`Kirim email pemulihan/reset kata sandi ke ${email}?`)) return;
+    if (authenticatedSupabaseSession) {
+      btn.disabled = true;
+      window.KharismaAuth.adminRequest('POST', { action: 'reset_password', email })
+        .then(res => showToast(res.message || `Tautan reset kata sandi telah dikirim ke ${email}.`))
+        .catch(err => showToast(`Gagal: ${err.message}`))
+        .finally(() => { btn.disabled = false; });
+    } else {
+      showToast(`(Mode Demo) Tautan reset kata sandi dikirim ke ${email}.`);
+    }
+    return;
+  }
+
+  if (action === 'toggle-status-user') {
+    const id = btn.dataset.id;
+    const usr = userAccounts.find(u => u.id === id);
+    if (!usr) return;
+    if (id === 'usr-admin' || id === authenticatedSupabaseSession?.user?.id) {
+      showToast('Akun administrator yang sedang digunakan tidak dapat dinonaktifkan.');
+      return;
+    }
+    const nextStatus = usr.status === 'Inactive' ? 'Active' : 'Inactive';
+    const msg = nextStatus === 'Inactive'
+      ? `Nonaktifkan akun "${usr.name}"? Pengguna tidak akan dapat masuk sistem.`
+      : `Aktifkan kembali akun "${usr.name}"? Sesi login akan dibuka kembali.`;
+    if (!confirm(msg)) return;
+
+    if (authenticatedSupabaseSession) {
+      btn.disabled = true;
+      window.KharismaAuth.adminRequest('PATCH', { id, status: nextStatus })
+        .then(() => {
+          usr.status = nextStatus;
+          openModule('kpi');
+          showToast(`Status akun ${usr.name} diubah menjadi ${nextStatus === 'Active' ? 'Aktif' : 'Nonaktif'}.`);
+        })
+        .catch(err => showToast(`Gagal mengubah status: ${err.message}`))
+        .finally(() => { btn.disabled = false; });
+      return;
+    }
+    usr.status = nextStatus;
+    persistUserAccounts();
+    openModule('kpi');
+    showToast(`Status akun ${usr.name} diubah menjadi ${nextStatus}.`);
+    return;
+  }
+
   if (action === 'delete-user-account') {
     const id = btn.dataset.id;
     if (id === 'usr-admin' || id === authenticatedSupabaseSession?.user?.id) {
-      showToast(id === authenticatedSupabaseSession?.user?.id ? 'Akun yang sedang digunakan tidak dapat dinonaktifkan.' : 'Akun Administrator utama tidak dapat dihapus.');
-      return;
-    }
-    if (id === activeAccountId) {
-      showToast('Tidak dapat menghapus akun yang sedang aktif. Pindah ke akun lain terlebih dahulu.');
+      showToast(id === authenticatedSupabaseSession?.user?.id ? 'Akun yang sedang digunakan tidak dapat dihapus.' : 'Akun administrator utama tidak dapat dihapus.');
       return;
     }
     const usr = userAccounts.find(u => u.id === id);
-    if (usr && confirm(`Yakin ingin menghapus akun pengguna "${usr.name}" (${usr.role})?`)) {
-      if (authenticatedSupabaseSession) {
-        window.KharismaAuth.adminRequest('PATCH', { id, status: 'Inactive' })
-          .then(() => { usr.status = 'Inactive'; openModule('kpi'); showToast(`Akun ${usr.name} dinonaktifkan dan sesi login diblokir.`); })
-          .catch(error => showToast(error.message));
-        return;
-      }
-      const idx = userAccounts.findIndex(u => u.id === id);
-      if (idx >= 0) {
-        userAccounts.splice(idx, 1);
-        persistUserAccounts();
-        openModule('kpi');
-        showToast(`Akun "${usr.name}" berhasil dihapus dari sistem.`);
-      }
+    if (!usr) return;
+    if (!confirm(`Hapus permanen akun "${usr.name}" (${roleLabel(usr.role)})?\n\nPERINGATAN: Akun login dan data profil pengguna akan dihapus permanen dari sistem!`)) {
+      return;
+    }
+    if (authenticatedSupabaseSession) {
+      btn.disabled = true;
+      window.KharismaAuth.adminRequest('DELETE', { id })
+        .then(() => {
+          const idx = userAccounts.findIndex(u => u.id === id);
+          if (idx >= 0) userAccounts.splice(idx, 1);
+          persistUserAccounts();
+          openModule('kpi');
+          showToast(`Akun ${usr.name} berhasil dihapus permanen.`);
+        })
+        .catch(error => showToast(`Gagal: ${error.message}`))
+        .finally(() => { btn.disabled = false; });
+      return;
+    }
+    const idx = userAccounts.findIndex(u => u.id === id);
+    if (idx >= 0) {
+      userAccounts.splice(idx, 1);
+      persistUserAccounts();
+      openModule('kpi');
+      showToast(`Akun "${usr.name}" dihapus dari simulasi lokal.`);
     }
     return;
   }
@@ -4709,7 +4941,7 @@ moduleView.addEventListener('click', async (event) => {
       const employee = employeeData.find(person => person[1]?.toLowerCase() === String(record.employee_name || record.name || '').toLowerCase());
       const rawDate = String(record.date || record.dateKey || attendanceTodayKey());
       const date = new Date(`${rawDate.slice(0,10)}T00:00:00+07:00`);
-      return [record.employee_name || record.name || userProfile.name, employee?.[3] || 'Karyawan', new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(date), record.work_model || record.workModel || '—', `${record.clock_in || record.clockIn || '—'} - ${record.clock_out || record.clockOut || 'Belum pulang'}`, record.duration || '—', record.overtime || '—', record.state && record.state !== 'completed' ? 'Belum Lengkap' : ({ 'On-Time': 'Tepat Waktu', Late: 'Terlambat', 'On Leave': 'Cuti', Absent: 'Tidak Hadir' }[record.status] || record.status || '—')];
+      return [record.employee_name || record.name || userProfile.name, employee?.[3] || 'Karyawan', new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Jakarta' }).format(date), record.work_model || record.workModel || 'â€”', `${record.clock_in || record.clockIn || 'â€”'} - ${record.clock_out || record.clockOut || 'Belum pulang'}`, record.duration || 'â€”', record.overtime || 'â€”', record.state && record.state !== 'completed' ? 'Belum Lengkap' : ({ 'On-Time': 'Tepat Waktu', Late: 'Terlambat', 'On Leave': 'Cuti', Absent: 'Tidak Hadir' }[record.status] || record.status || 'â€”')];
     });
     downloadCsv('laporan-kehadiran-kharisma-hub.csv', [headers, ...rows]);
     return;
@@ -5011,7 +5243,7 @@ moduleView.addEventListener('click', async (event) => {
         employeeData.sort((a, b) => isAsc ? a[sortKey].localeCompare(b[sortKey]) : b[sortKey].localeCompare(a[sortKey]));
       }
       openModule('employees');
-      showToast(`Tabel diurutkan berdasarkan ${btn.textContent.replace(/[↕\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
+      showToast(`Tabel diurutkan berdasarkan ${btn.textContent.replace(/[â†•\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
       return;
     }
   }
@@ -5037,7 +5269,7 @@ moduleView.addEventListener('click', async (event) => {
       return isAsc ? textA.localeCompare(textB, undefined, { numeric: true }) : textB.localeCompare(textA, undefined, { numeric: true });
     });
     rows.forEach(r => tbody.appendChild(r));
-    showToast(`Tabel absensi diurutkan: ${btn.textContent.replace(/[↕\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
+    showToast(`Tabel absensi diurutkan: ${btn.textContent.replace(/[â†•\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
     return;
   }
 
@@ -5069,7 +5301,7 @@ moduleView.addEventListener('click', async (event) => {
     });
 
     openModule('kpi');
-    showToast(`Tabel KPI diurutkan: ${btn.textContent.replace(/[↕\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
+    showToast(`Tabel KPI diurutkan: ${btn.textContent.replace(/[â†•\s]/g, '')} (${isAsc ? 'A-Z' : 'Z-A'})`);
     return;
   }
 });
@@ -5229,7 +5461,7 @@ function setupGlobalSearch() {
             ${avatar(p[0], `p${(idx % 9) + 1}`)}
             <div class="search-item-info">
               <strong>${safe(p[0])}</strong>
-              <small>${safe(p[3])} · ${safe(p[2])}</small>
+              <small>${safe(p[3])} Â· ${safe(p[2])}</small>
             </div>
             <span class="search-item-badge">Karyawan</span>
           </button>
@@ -5244,7 +5476,7 @@ function setupGlobalSearch() {
           <button type="button" class="search-result-item" data-search-type="kpi" data-id="${k.id}">
             <div class="search-item-info">
               <strong>${safe(k.title)}</strong>
-              <small>${safe(k.dept)} · Target: ${k.target} ${safe(k.unit)} · ${safe(k.status)}</small>
+              <small>${safe(k.dept)} Â· Target: ${k.target} ${safe(k.unit)} Â· ${safe(k.status)}</small>
             </div>
             <span class="search-item-badge" style="background:#e0e7ff;color:#4338ca">KPI</span>
           </button>
@@ -5259,7 +5491,7 @@ function setupGlobalSearch() {
           <button type="button" class="search-result-item" data-search-type="calendar" data-day="${item.day}">
             <div class="search-item-info">
               <strong>${safe(item.title)}</strong>
-              <small>${item.day} Juni · ${safe(item.time)} · ${safe(item.location || '')}</small>
+              <small>${item.day} Juni Â· ${safe(item.time)} Â· ${safe(item.location || '')}</small>
             </div>
             <span class="search-item-badge" style="background:#e0f2fe;color:#0369a1">Agenda</span>
           </button>
@@ -5274,7 +5506,7 @@ function setupGlobalSearch() {
           <button type="button" class="search-result-item" data-search-type="leave" data-id="${req.id}">
             <div class="search-item-info">
               <strong>${safe(req.name)} (${safe(req.type)})</strong>
-              <small>${safe(req.period)} · ${safe(req.status)}</small>
+              <small>${safe(req.period)} Â· ${safe(req.status)}</small>
             </div>
             <span class="search-item-badge" style="background:#fef3c7;color:#b45309">Cuti</span>
           </button>
@@ -5289,7 +5521,7 @@ function setupGlobalSearch() {
           <button type="button" class="search-result-item" data-search-type="inbox" data-id="${mail.id}">
             <div class="search-item-info">
               <strong>${safe(mail.subject)}</strong>
-              <small>Dari: ${safe(mail.from)} · ${safe(mail.time)}</small>
+              <small>Dari: ${safe(mail.from)} Â· ${safe(mail.time)}</small>
             </div>
             <span class="search-item-badge" style="background:#f3e8ff;color:#7e22ce">Inbox</span>
           </button>
@@ -5441,7 +5673,7 @@ function setupDashboardControls() {
     const cur = btn.dataset.state || 'This Month';
     const next = states[(states.indexOf(cur) + 1) % states.length];
     btn.dataset.state = next;
-    btn.innerHTML = `${next} <span>⌄</span>`;
+    btn.innerHTML = `${next} <span>âŒ„</span>`;
     showToast(`Filter absensi dasbor: ${next}`);
   });
 
@@ -5451,7 +5683,7 @@ function setupDashboardControls() {
       const cur = btn.dataset.period || 'This Month';
       const next = periods[(periods.indexOf(cur) + 1) % periods.length];
       btn.dataset.period = next;
-      btn.innerHTML = `${next} <span>⌄</span>`;
+      btn.innerHTML = `${next} <span>âŒ„</span>`;
       showToast(`Periode data diubah ke: ${next}`);
     });
   });
@@ -5787,73 +6019,6 @@ document.addEventListener('submit', (event) => {
       document.querySelector('#editDivisionDialog')?.close();
       openModule('kpi');
       showToast(`Data divisi "${name}" berhasil disimpan.`);
-    }
-    return;
-  }
-
-  // 9. User Account Form
-  if (form.id === 'userAccountForm') {
-    event.preventDefault();
-    const data = new FormData(form);
-    const name = (data.get('name') || '').trim();
-    const email = (data.get('email') || '').trim();
-    const role = data.get('role') || 'Supervisor';
-    const department = data.get('department') || (departmentsData[0]?.name || 'Human Resources');
-    const title = (data.get('title') || '').trim() || `${role} ${department}`;
-
-    if (!name || !email) return;
-    const newAcct = {
-      id: `usr-${Date.now()}`,
-      name,
-      email,
-      role,
-      department,
-      title,
-      status: 'Active',
-      lastLogin: 'Baru saja',
-      avatar: 'men/45'
-    };
-    userAccounts.push(newAcct);
-    persistUserAccounts();
-
-    const empExists = employeeData.some(p => p[0].toLowerCase() === name.toLowerCase());
-    if (!empExists) {
-      employeeData.push([name, email, department, title || role, 'On-Time']);
-      getEmployeeId(name);
-      persistEmployeeData();
-    }
-
-    form.reset();
-    document.querySelector('#userAccountDialog')?.close();
-    openModule('kpi');
-    showToast(`Akun pengguna untuk ${name} (${role}) berhasil dibuat.`);
-    return;
-  }
-
-  // 10. Edit User Account Form
-  if (form.id === 'editUserAccountForm') {
-    event.preventDefault();
-    const data = new FormData(form);
-    const id = data.get('userId');
-    const name = (data.get('name') || '').trim();
-    const email = (data.get('email') || '').trim();
-    const role = data.get('role') || 'Supervisor';
-    const department = data.get('department') || 'Human Resources';
-    const title = (data.get('title') || '').trim();
-    const status = data.get('status') || 'Active';
-
-    const acct = userAccounts.find(u => u.id === id);
-    if (acct) {
-      acct.name = name;
-      acct.email = email;
-      acct.role = role;
-      acct.department = department;
-      acct.title = title;
-      acct.status = status;
-      persistUserAccounts();
-      document.querySelector('#editUserAccountDialog')?.close();
-      openModule('kpi');
-      showToast(`Akun ${name} berhasil diperbarui.`);
     }
     return;
   }

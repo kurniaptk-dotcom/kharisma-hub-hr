@@ -291,8 +291,9 @@
 
             setPasswordMsg.classList.add('success');
             setPasswordMsg.textContent = 'Kata sandi tersimpan & akun aktif! Mengalihkan...';
+            const targetDest = profile?.role === 'Employee' ? 'portal.html' : 'index.html';
             setTimeout(() => {
-              window.location.replace('index.html');
+              window.location.replace(targetDest);
             }, 600);
           } catch (err) {
             console.error('[SetPassword Error]', err);
@@ -369,7 +370,8 @@
             }
 
             btnSubmit.textContent = 'Berhasil! Mengalihkan...';
-            window.location.replace('index.html');
+            const targetDest = profile?.role === 'Employee' ? 'portal.html' : 'index.html';
+            window.location.replace(targetDest);
           } catch (err) {
             console.error('[Login Error]', err);
             const msg = err.message || '';

@@ -92,11 +92,18 @@ function applyRoleNavigation(role) {
   const allowed = role === 'Admin'
     ? null
     : role === 'Supervisor'
-      ? new Set(['dashboard','calendar','employees','attendance','performance','kpi','leave'])
-      : new Set(['dashboard','calendar','employees','attendance','leave']);
+      ? new Set(['portal','dashboard','calendar','employees','attendance','performance','kpi','leave'])
+      : new Set(['portal','calendar','attendance','leave']);
   document.querySelectorAll('.main-nav .nav-link').forEach(link => {
     link.hidden = Boolean(allowed && !allowed.has(link.dataset.module));
   });
+  if (role === 'Employee') {
+    const rawFile = (window.location.pathname.split('/').pop().toLowerCase() || 'index').replace(/\.html$/, '');
+    if (rawFile === 'index' || rawFile === '') {
+      window.location.replace('portal.html');
+      return;
+    }
+  }
   document.querySelectorAll('.main-nav .nav-link[data-module="attendance"]').forEach(link => {
     const iconSpan = link.querySelector('.nav-icon');
     const iconHtml = iconSpan ? iconSpan.outerHTML : '<span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>';
@@ -636,9 +643,10 @@ async function performAttendanceTransition(action) {
     }
     persistUserAttendance();
     if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
-    if (moduleView && !moduleView.hidden && moduleView.dataset.page === 'attendance') {
-      moduleView.innerHTML = pageMarkup('attendance');
+    if (moduleView && !moduleView.hidden && (moduleView.dataset.page === 'attendance' || moduleView.dataset.page === 'portal')) {
+      moduleView.innerHTML = pageMarkup(moduleView.dataset.page);
       setupTablePagination();
+      startLiveAttendanceClock();
     }
     const actionToastMap = {
       clock_in: `Presensi masuk berhasil dicatat (${userAttendanceRecord.clockIn}) • Status: ${userAttendanceRecord.status === 'Late' ? 'Terlambat' : 'Tepat Waktu'}`,
@@ -662,7 +670,7 @@ function persistUserAttendance() { writeStoredValue('teamhub.userAttendance', us
 function startLiveAttendanceClock() {
   if (window.__attLiveClockInterval) clearInterval(window.__attLiveClockInterval);
   const update = () => {
-    const el = document.querySelector('#attLiveClockDisplay');
+    const el = document.querySelector('#attLiveClockDisplay') || document.querySelector('#portalLiveClockDisplay');
     if (!el) return;
     const now = new Date();
     el.textContent = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
@@ -1800,6 +1808,7 @@ function renderDashboardActivities() {
 const dashboardView = document.querySelector('#dashboardView');
 const moduleView = document.querySelector('#moduleView');
 const moduleTitles = {
+  portal: ['Portal Karyawan', 'Layanan mandiri karyawan: Presensi, Pengajuan Izin & Cuti, Slip Gaji, dan Informasi Kerja.'],
   dashboard: ['Dashboard', 'Overview of your HR operations and workforce performance.'],
   inbox: ['Inbox', 'Your team updates and messages in one place.'],
   calendar: ['Calendar', 'Plan interviews, reviews and team events.'],
@@ -2578,6 +2587,380 @@ function pageMarkup(key) {
           </article>
         </form>
       </section>
+    `;
+  }
+
+  // 0. PORTAL KARYAWAN (Employee Self-Service / ESS Hub)
+  if (key === 'portal') {
+    const currentAcc = getActiveAccount();
+    const ownEmp = getOwnEmployeeRow();
+    const myName = ownEmp ? ownEmp[0] : (currentAcc ? currentAcc.name : userProfile.name);
+    const empProf = getEmployeeProfile(myName);
+    const myEmpId = empProf.id || (ownEmp ? `EMP-${getEmployeeId(ownEmp)}` : (currentAcc?.employeeId || 'EMP-0001'));
+    const myDept = ownEmp ? ownEmp[2] : (currentAcc ? currentAcc.department : userProfile.department);
+    const myTitle = ownEmp ? ownEmp[3] : (currentAcc ? currentAcc.title : userProfile.title);
+    const myRole = currentAcc ? currentAcc.role : userProfile.role;
+    const myWorkModel = empProf.workModel || 'On-Site';
+
+    // Attendance State
+    const activeRecordToday = userAttendanceRecord && (userAttendanceRecord.dateKey === attendanceTodayKey() || isActiveOvernightAttendance(userAttendanceRecord));
+    const hasClockedIn = Boolean(activeRecordToday && userAttendanceRecord?.clockIn && userAttendanceRecord.clockIn !== '—');
+    const hasClockedOut = Boolean(activeRecordToday && userAttendanceRecord?.clockOut && userAttendanceRecord.clockOut !== '—');
+    const isOnOvertime = Boolean(activeRecordToday && userAttendanceRecord?.state === 'on_overtime');
+    const isWorking = Boolean(activeRecordToday && userAttendanceRecord?.state === 'working');
+    const canClockOut = Boolean(activeRecordToday && (isWorking || userAttendanceRecord?.state === 'on_break' || isOnOvertime) && !hasClockedOut);
+    const canStartOvertime = Boolean(activeRecordToday && hasClockedIn && !isOnOvertime);
+
+    let statusText = 'Belum Absen Hari Ini';
+    let statusClass = 'pending';
+    if (isOnOvertime) {
+      statusText = `Sedang Lembur • Sejak ${safe(userAttendanceRecord.overtimeStart || userAttendanceRecord.clockIn)}`;
+      statusClass = 'overtime';
+    } else if (hasClockedOut) {
+      statusText = `Selesai Bekerja • Pulang ${safe(userAttendanceRecord.clockOut)}`;
+      statusClass = 'completed';
+    } else if (isWorking || hasClockedIn) {
+      statusText = `Sedang Bekerja • Masuk ${safe(userAttendanceRecord.clockIn)}`;
+      statusClass = 'active-work';
+    }
+
+    // Leave & Quota
+    const userLeaves = leaveRequests.filter(req => {
+      return String(req.name || '').toLowerCase() === String(myName || '').toLowerCase() ||
+        String(req.email || '').toLowerCase() === String(userProfile.email || '').toLowerCase();
+    });
+    const pendingLeaves = userLeaves.filter(l => l.status === 'Pending').length;
+    const totalAnnualQuota = 12;
+    const usedAnnualDays = userLeaves
+      .filter(l => (l.status === 'Approved' || l.status === 'Disetujui') && String(l.type || '').toLowerCase().includes('cuti'))
+      .reduce((sum, l) => {
+        const match = String(l.duration || '').match(/(\d+)/);
+        return sum + (match ? parseInt(match[1], 10) : 1);
+      }, 0);
+    const remainingLeaveDays = Math.max(0, totalAnnualQuota - usedAnnualDays);
+
+    // Personal Attendance 7-Day History
+    const personalHistory = getPersonalAttendanceHistory().slice(0, 7);
+
+    // Personal Payslip Data
+    const baseSalaryNum = Math.round((empProf.salaryRaw || 3200) * 1000);
+    const allowanceNum = Math.round((empProf.allowanceRaw || 300) * 1000);
+    const estTakeHome = baseSalaryNum + allowanceNum + 350000 - Math.round(baseSalaryNum * 0.065);
+    const fmtRupiah = (num) => new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', maximumFractionDigits: 0 }).format(num);
+
+    const now = new Date();
+    const dateFormatted = now.toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const timeFormatted = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+
+    return `
+      <div class="portal-layout">
+        <!-- 1. Hero Header Banner Profil -->
+        <section class="portal-hero">
+          <div class="portal-hero-profile">
+            <div class="portal-hero-avatar">
+              ${empProf.avatar ? `<img src="https://randomuser.me/api/portraits/${empProf.avatar}.jpg" alt="${safe(myName)}" onerror="this.remove()" />` : initials(myName)}
+            </div>
+            <div class="portal-hero-info">
+              <h2>Halo, ${safe(myName)} 👋</h2>
+              <p>
+                <span>${safe(myTitle)}</span> &bull; 
+                <span>${safe(myDept)}</span> &bull; 
+                <span>${safe(myEmpId)}</span>
+              </p>
+              <div class="portal-meta-badges">
+                <span class="portal-chip ${statusClass}">
+                  <span class="live-pulse-dot ${statusClass === 'active-work' || statusClass === 'overtime' ? 'working' : 'break'}"></span>
+                  ${statusText}
+                </span>
+                <span class="portal-chip">${safe(myWorkModel)}</span>
+                <span class="portal-chip">${roleLabel(myRole)}</span>
+              </div>
+            </div>
+          </div>
+          <div class="portal-hero-time">
+            <span class="portal-clock" id="portalLiveClockDisplay">${timeFormatted}</span>
+            <span class="portal-date">${dateFormatted}</span>
+            <span class="portal-shift-pill">Shift Reguler • 09:00 - 17:00 WIB</span>
+          </div>
+        </section>
+
+        <!-- 2. Main Two-Column Grid -->
+        <div class="portal-grid-layout">
+          <!-- Left Column -->
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <!-- Panel Presensi & Lembur Mandiri -->
+            <section class="module-card" style="margin:0">
+              <div class="module-card-head">
+                <h2 style="font-size:14px;color:#0c1e36;display:flex;align-items:center;gap:7px">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Kontrol Presensi &amp; Lembur Mandiri
+                </h2>
+                <span style="font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:5px">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+                  ${userAttendanceRecord?.location?.verified ? 'Radius Kantor Terverifikasi' : 'Siap Diverifikasi GPS'}
+                </span>
+              </div>
+
+              <!-- 4 Attendance Buttons Grid -->
+              <div class="att-actions-control-grid" style="margin-bottom:12px">
+                <!-- Absen Masuk -->
+                <button type="button" class="att-btn-action ${!hasClockedIn ? 'active-cta' : 'disabled-done'}" data-action="attendance-transition" data-transition="clock_in" ${hasClockedIn ? 'disabled' : ''}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                  <span>${hasClockedIn ? `Masuk (${safe(userAttendanceRecord.clockIn)})` : 'Absen Masuk'}</span>
+                </button>
+
+                <!-- Absen Keluar -->
+                <button type="button" class="att-btn-action ${canClockOut ? 'active-cta warning' : 'disabled-done'}" data-action="attendance-transition" data-transition="clock_out" ${!canClockOut ? 'disabled' : ''}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  <span>${hasClockedOut ? `Pulang (${safe(userAttendanceRecord.clockOut)})` : 'Absen Keluar'}</span>
+                </button>
+
+                <!-- Mulai Lembur -->
+                <button type="button" class="att-btn-action ${canStartOvertime ? 'active-cta purple' : 'disabled-done'}" data-action="attendance-transition" data-transition="overtime_start" ${!canStartOvertime ? 'disabled' : ''}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>${isOnOvertime ? 'Lembur Aktif' : 'Mulai Lembur'}</span>
+                </button>
+
+                <!-- Selesai Lembur -->
+                <button type="button" class="att-btn-action ${isOnOvertime ? 'active-cta amber pulse' : 'disabled-done'}" data-action="attendance-transition" data-transition="overtime_end" ${!isOnOvertime ? 'disabled' : ''}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  <span>Selesai Lembur</span>
+                </button>
+              </div>
+
+              <div class="att-cta-sub-row" style="margin-top:8px">
+                <button type="button" class="att-sub-btn primary-leave" data-action="toggle-att-leave" title="Formulir Pengajuan Izin Kerja">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                  <span>+ Ajukan Izin / Cuti Kerja</span>
+                </button>
+                <button type="button" class="att-sub-btn" data-action="toggle-att-correction" title="Ajukan Koreksi Jam Kerja">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>Ajukan Koreksi Presensi</span>
+                </button>
+              </div>
+
+              <!-- Drawer Formulir Izin Kerja -->
+              <div id="attLeaveDrawer" class="attendance-drawer" hidden style="margin-top:14px">
+                <form data-attendance-leave-form class="attendance-drawer-form">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:10px">
+                    <div>
+                      <h4 style="margin:0;font-size:15px;color:#fff;display:flex;align-items:center;gap:8px">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                        Formulir Pengajuan Izin Kerja &amp; Cuti
+                      </h4>
+                      <p style="margin:4px 0 0;font-size:12px;color:#cbd5e1">Isi formulir pengajuan ketidakhadiran resmi untuk ditinjau oleh atasan/HRD.</p>
+                    </div>
+                    <button type="button" class="att-drawer-close" data-action="toggle-att-leave" aria-label="Tutup Formulir">&times;</button>
+                  </div>
+                  <div class="dialog-two">
+                    <label style="color:#e2e8f0;font-size:12px;display:grid;gap:4px">Jenis Izin Kerja
+                      <select name="type" required style="background:#fff;color:#0f172a;border-radius:6px;height:34px;padding:0 8px;border:1px solid #cbd5e1;font-size:13px">
+                        <option value="Sakit">Sakit (Dengan/Tanpa Surat Dokter)</option>
+                        <option value="Melahirkan">Melahirkan (Cuti Melahirkan)</option>
+                        <option value="Menikah">Menikah (Izin Pernikahan)</option>
+                        <option value="Cuti">Cuti Tahunan (Cuti Mandiri)</option>
+                        <option value="Lainnya">Lainnya (Keperluan Keluarga / Dinas Luar)</option>
+                      </select>
+                    </label>
+                    <label style="color:#e2e8f0;font-size:12px;display:grid;gap:4px">Durasi Pengajuan
+                      <input id="attLeaveDurationDisplay" type="text" readonly value="1 Hari" style="background:#f1f5f9;color:#0f172a;border-radius:6px;height:34px;padding:0 8px;border:1px solid #cbd5e1;font-size:13px;font-weight:700" />
+                    </label>
+                  </div>
+                  <div class="dialog-two" style="margin-top:8px">
+                    <label style="color:#e2e8f0;font-size:12px;display:grid;gap:4px">Tanggal Mulai Izin
+                      <input name="startDate" id="attLeaveStartDate" type="date" required value="${attendanceTodayKey()}" style="background:#fff;color:#0f172a;border-radius:6px;height:34px;padding:0 8px;border:1px solid #cbd5e1;font-size:13px" />
+                    </label>
+                    <label style="color:#e2e8f0;font-size:12px;display:grid;gap:4px">Tanggal Selesai Izin
+                      <input name="endDate" id="attLeaveEndDate" type="date" required value="${attendanceTodayKey()}" style="background:#fff;color:#0f172a;border-radius:6px;height:34px;padding:0 8px;border:1px solid #cbd5e1;font-size:13px" />
+                    </label>
+                  </div>
+                  <label style="margin-top:8px;color:#e2e8f0;font-size:12px;display:grid;gap:4px">Keterangan / Alasan Izin
+                    <textarea name="reason" rows="2" required placeholder="Tuliskan keterangan detail keperluan izin kerja..." style="background:#fff;color:#0f172a;border-radius:6px;padding:8px;border:1px solid #cbd5e1;font-size:13px"></textarea>
+                  </label>
+                  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+                    <button type="button" class="module-button secondary" data-action="toggle-att-leave" style="color:#0f172a">Batal</button>
+                    <button type="submit" class="module-button primary" style="background:#0962ea;border-color:#0962ea;color:#fff">Kirim Pengajuan Izin</button>
+                  </div>
+                </form>
+              </div>
+
+              <!-- Drawer Koreksi Presensi -->
+              <div id="attCorrectionDrawer" class="attendance-drawer" hidden style="margin-top:14px">
+                <form data-attendance-correction class="attendance-drawer-form">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:8px">
+                    <h4 style="margin:0;font-size:14px;color:#fff">Pengajuan Koreksi Jam Kerja</h4>
+                    <button type="button" class="att-drawer-close" data-action="toggle-att-correction">&times;</button>
+                  </div>
+                  <div class="dialog-two">
+                    <label style="color:#e2e8f0;font-size:12px">Koreksi Jam Masuk<input name="clockIn" type="time" style="background:#fff;color:#0f172a" /></label>
+                    <label style="color:#e2e8f0;font-size:12px">Koreksi Jam Pulang<input name="clockOut" type="time" style="background:#fff;color:#0f172a" /></label>
+                  </div>
+                  <label style="margin-top:8px;color:#e2e8f0;font-size:12px">Alasan Koreksi
+                    <textarea name="reason" rows="2" required placeholder="Jelaskan alasan penyesuaian jam kerja..." style="background:#fff;color:#0f172a"></textarea>
+                  </label>
+                  <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+                    <button type="button" class="module-button secondary" data-action="toggle-att-correction">Batal</button>
+                    <button type="submit" class="module-button primary">Kirim Permintaan Koreksi</button>
+                  </div>
+                </form>
+              </div>
+            </section>
+
+            <!-- Panel Cuti & Pengajuan Izin Kerja -->
+            <section class="module-card" style="margin:0">
+              <div class="module-card-head">
+                <h2 style="font-size:14px;color:#0c1e36;display:flex;align-items:center;gap:7px">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><line x1="9" y1="14" x2="15" y2="18"/><line x1="15" y1="14" x2="9" y2="18"/></svg>
+                  Manajemen Cuti &amp; Izin Kerja Saya
+                </h2>
+                <button class="module-button primary" data-action="toggle-att-leave" style="font-size:11.5px">+ Ajukan Izin</button>
+              </div>
+
+              <!-- Stat Box Kuota -->
+              <div class="portal-stat-row">
+                <div class="portal-stat-box highlight">
+                  <span>Sisa Cuti Tahunan</span>
+                  <strong>${remainingLeaveDays} Hari</strong>
+                  <small>Dari total kuota 12 hari/tahun</small>
+                </div>
+                <div class="portal-stat-box">
+                  <span>Cuti / Izin Terpakai</span>
+                  <strong>${usedAnnualDays} Hari</strong>
+                  <small>Tahun berjalan 2026</small>
+                </div>
+                <div class="portal-stat-box">
+                  <span>Menunggu Persetujuan</span>
+                  <strong>${pendingLeaves} Pengajuan</strong>
+                  <small>${pendingLeaves > 0 ? 'Sedang ditinjau HRD' : 'Semua telah diproses'}</small>
+                </div>
+              </div>
+
+              <!-- Tabel Riwayat Izin Personal -->
+              <h4 style="font-size:12.5px;color:#334155;margin:12px 0 8px">Riwayat Pengajuan Terakhir</h4>
+              <div class="module-table-wrap">
+                <table class="module-table" style="min-width:540px">
+                  <thead>
+                    <tr>
+                      <th>Jenis Izin</th>
+                      <th>Tanggal</th>
+                      <th>Durasi</th>
+                      <th>Alasan</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${userLeaves.length ? userLeaves.slice(0, 5).map(l => `
+                      <tr>
+                        <td><strong>${safe(l.type)}</strong></td>
+                        <td>${safe(l.startDate || l.start || '—')} ${l.endDate && l.endDate !== l.startDate ? `s/d ${safe(l.endDate)}` : ''}</td>
+                        <td><span class="employment-pill">${safe(l.duration || '1 Hari')}</span></td>
+                        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safe(l.reason || '—')}</td>
+                        <td>
+                          <span class="status ${l.status === 'Approved' || l.status === 'Disetujui' ? 'ontime' : l.status === 'Rejected' || l.status === 'Ditolak' ? 'absent' : 'leave'}">
+                            ${safe(l.status)}
+                          </span>
+                        </td>
+                      </tr>
+                    `).join('') : `
+                      <tr><td colspan="5" class="empty-state">Belum ada riwayat pengajuan izin atau cuti.</td></tr>
+                    `}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <!-- Panel Akses Slip Gaji Pribadi -->
+            <section class="module-card" style="margin:0">
+              <div class="module-card-head">
+                <h2 style="font-size:14px;color:#0c1e36;display:flex;align-items:center;gap:7px">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  Slip Gaji Saya (My Official Payslips)
+                </h2>
+                <span class="meta-chip" style="font-size:11px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">Kompensasi Resmi</span>
+              </div>
+              <p style="margin:0 0 12px;font-size:12.5px;color:#64748b">
+                Akses dokumen rincian gaji bulanan Anda yang telah diverifikasi oleh bagian Finance &amp; SDM.
+              </p>
+
+              <div class="portal-payslip-item">
+                <div>
+                  <strong style="display:block;font-size:13.5px;color:#0f172a">Periode Oktober 2026</strong>
+                  <small style="color:#64748b;font-size:11.5px">Dibayarkan: 28 Okt 2026 &bull; Gaji Bersih: <b style="color:#0962ea">${fmtRupiah(estTakeHome)}</b></small>
+                </div>
+                <button type="button" class="module-button primary" data-action="view-my-payslip" data-name="${safe(myName)}" title="Buka Slip Gaji Resmi">
+                  Lihat &amp; Cetak Slip Gaji
+                </button>
+              </div>
+
+              <div class="portal-payslip-item">
+                <div>
+                  <strong style="display:block;font-size:13.5px;color:#0f172a">Periode September 2026</strong>
+                  <small style="color:#64748b;font-size:11.5px">Dibayarkan: 28 Sep 2026 &bull; Status: <span class="status ontime">Lunas</span></small>
+                </div>
+                <button type="button" class="module-button secondary" data-action="view-my-payslip" data-name="${safe(myName)}" title="Buka Arsip Slip Gaji">
+                  Lihat Slip Gaji
+                </button>
+              </div>
+
+              <div class="portal-payslip-item">
+                <div>
+                  <strong style="display:block;font-size:13.5px;color:#0f172a">Periode Agustus 2026</strong>
+                  <small style="color:#64748b;font-size:11.5px">Dibayarkan: 28 Agu 2026 &bull; Status: <span class="status ontime">Lunas</span></small>
+                </div>
+                <button type="button" class="module-button secondary" data-action="view-my-payslip" data-name="${safe(myName)}" title="Buka Arsip Slip Gaji">
+                  Lihat Slip Gaji
+                </button>
+              </div>
+            </section>
+          </div>
+
+          <!-- Right Column -->
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <!-- Riwayat Presensi 7 Hari Terakhir -->
+            <section class="module-card" style="margin:0">
+              <div class="module-card-head">
+                <h2 style="font-size:13.5px;color:#0c1e36">Riwayat Presensi (7 Hari Terakhir)</h2>
+                <a href="attendance.html" style="font-size:11.5px;color:#0962ea;text-decoration:none;font-weight:600">Lihat Semua &rarr;</a>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:8px">
+                ${personalHistory.length ? personalHistory.map(h => `
+                  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">
+                    <div>
+                      <strong style="display:block;font-size:12.5px;color:#1e293b">${safe(h.dateFormatted || h.dateKey)}</strong>
+                      <small style="color:#64748b;font-size:11px">In: ${safe(h.clockIn || '—')} &bull; Out: ${safe(h.clockOut || '—')} (${safe(h.duration || '—')})</small>
+                    </div>
+                    <span class="status ${h.status === 'Tepat Waktu' || h.status === 'On-Time' ? 'ontime' : h.status === 'Terlambat' || h.status === 'Late' ? 'late' : 'leave'}" style="font-size:11px">
+                      ${safe(h.status || 'Hadir')}
+                    </span>
+                  </div>
+                `).join('') : `
+                  <p style="color:#94a3b8;font-size:12px;margin:10px 0;text-align:center">Belum ada catatan log kehadiran.</p>
+                `}
+              </div>
+            </section>
+
+            <!-- Informasi Kerja & Pengumuman Resmi -->
+            <section class="module-card" style="margin:0">
+              <div class="module-card-head">
+                <h2 style="font-size:13.5px;color:#0c1e36">Pengumuman &amp; Memo Perusahaan</h2>
+                <span class="status ontime" style="font-size:10px">Aktif</span>
+              </div>
+              <div class="portal-notice-card">
+                <strong>Jadwal Penggajian Bulan Ini</strong>
+                <p>Proses penggajian periode Oktober 2026 akan ditransfer pada hari Rabu, 28 Oktober 2026. Mohon cek slip gaji Anda setelah tanggal tersebut.</p>
+              </div>
+              <div class="portal-notice-card" style="border-left-color:#3b82f6">
+                <strong>Kebijakan Toleransi Presensi</strong>
+                <p>Batas toleransi keterlambatan adalah 15 menit dari jam shift kerja. Apabila ada kendala teknis atau dinas luar, silakan gunakan fitur Koreksi Presensi.</p>
+              </div>
+              <div class="portal-notice-card" style="border-left-color:#10b981">
+                <strong>Libur Nasional &amp; Cuti Bersama</strong>
+                <p>Agenda libur perusahaan terdekat dapat dilihat secara interaktif pada menu <a href="calendar.html" style="color:#0962ea;font-weight:600">Kalender Kerja</a>.</p>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -4139,6 +4522,7 @@ function pageMarkup(key) {
    ========================================================================== */
 
 const keyToFile = {
+  portal: 'portal.html',
   dashboard: 'index.html',
   inbox: 'inbox.html',
   calendar: 'calendar.html',
@@ -4158,6 +4542,7 @@ function resolveRoute(hashString = window.location.hash) {
   const rawFile = window.location.pathname.split('/').pop().toLowerCase();
   const fileName = rawFile.replace(/\.html$/, '') || 'index';
   const fileMap = {
+    'portal': 'portal',
     'index': 'dashboard',
     '': 'dashboard',
     'inbox': 'inbox',
@@ -4190,7 +4575,7 @@ function resolveRoute(hashString = window.location.hash) {
   const clean = (hashString || '').replace(/^#\/?/, '').trim();
   const [route, queryString] = clean.split('?');
   const params = new URLSearchParams(queryString || '');
-  const validModules = ['dashboard', 'inbox', 'calendar', 'employees', 'employee-grid', 'employee-details', 'employee-add', 'attendance', 'performance', 'kpi', 'payroll', 'leave', 'recruitment'];
+  const validModules = ['portal', 'dashboard', 'inbox', 'calendar', 'employees', 'employee-grid', 'employee-details', 'employee-add', 'attendance', 'performance', 'kpi', 'payroll', 'leave', 'recruitment'];
   const aliasMap = {
     '': 'dashboard',
     'tasks': 'inbox',
@@ -4230,8 +4615,8 @@ function openModule(key, updateUrl = true, params = null) {
 
   if (activeRole !== 'Admin') {
     const allowed = activeRole === 'Supervisor'
-      ? new Set(['dashboard','calendar','employees','employee-grid','employee-details','attendance','performance','kpi','leave'])
-      : new Set(['dashboard','calendar','employees','employee-grid','employee-details','attendance','leave']);
+      ? new Set(['portal','dashboard','calendar','employees','employee-grid','employee-details','attendance','performance','kpi','leave'])
+      : new Set(['portal','dashboard','calendar','employees','employee-grid','employee-details','attendance','leave']);
 
     if (activeRole === 'Employee' && ['employees','employee-grid','employee-details'].includes(key)) {
       const own = getOwnEmployeeRow();
@@ -4344,6 +4729,9 @@ function openModule(key, updateUrl = true, params = null) {
 
     moduleView.dataset.page = key;
     setupTablePagination();
+    if (key === 'attendance' || key === 'portal') {
+      startLiveAttendanceClock();
+    }
     if (key === 'kpi') {
       updateDepartmentDropdowns();
     }
@@ -5858,7 +6246,7 @@ mainContentArea.addEventListener('click', async (event) => {
   }
 
   // Show Payslip Modal
-  if (action === 'show-payslip') {
+  if (action === 'show-payslip' || action === 'view-my-payslip' || action === 'view-payslip') {
     const name = btn.dataset.name || selectedEmployeeName;
     openPayslipModal(name);
     return;

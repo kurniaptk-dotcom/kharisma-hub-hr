@@ -1038,7 +1038,9 @@ const defaultUserAccounts = [
   { id: 'usr-spv-3', name: 'Jacob Yuen', email: 'jacob.yuen@kharismahub.com', role: 'Supervisor', department: 'Operations', title: 'Operations Lead', status: 'Active', avatar: 'men/47', lastLogin: '2026-10-21 08:30' },
   { id: 'usr-spv-4', name: 'Mia Torres', email: 'mia.torres@kharismahub.com', role: 'Supervisor', department: 'Human Resources', title: 'HR Team Lead', status: 'Active', avatar: 'women/68', lastLogin: '2026-10-21 09:55' },
   { id: 'usr-spv-5', name: 'Farah Nabila', email: 'farah.nabila@kharismahub.com', role: 'Supervisor', department: 'Customer Service', title: 'Customer Service Lead', status: 'Active', avatar: 'women/49', lastLogin: '2026-10-20 14:20' },
-  { id: 'usr-spv-6', name: 'Lina Armand', email: 'lina.armand@kharismahub.com', role: 'Supervisor', department: 'R&D', title: 'R&D Lab Lead', status: 'Active', avatar: 'women/17', lastLogin: '2026-10-19 11:15' }
+  { id: 'usr-spv-6', name: 'Lina Armand', email: 'lina.armand@kharismahub.com', role: 'Supervisor', department: 'R&D', title: 'R&D Lab Lead', status: 'Active', avatar: 'women/17', lastLogin: '2026-10-19 11:15' },
+  { id: 'usr-emp-1', name: 'Sara Kim', email: 'sara.kim@kharismahub.com', role: 'Employee', department: 'Customer Service', title: 'Customer Support Intern', status: 'Active', avatar: 'women/26', lastLogin: '2026-10-23 08:30' },
+  { id: 'usr-emp-2', name: 'Daniel Cheung', email: 'daniel.cheung@kharismahub.com', role: 'Employee', department: 'Operations', title: 'Compliance Specialist', status: 'Active', avatar: 'men/52', lastLogin: '2026-10-23 08:45' }
 ];
 
 let userAccounts = readStoredValue('teamhub.userAccounts', defaultUserAccounts).map(u => ({

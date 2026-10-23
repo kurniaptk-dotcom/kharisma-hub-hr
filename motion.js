@@ -123,19 +123,7 @@
 
   /* ---------- Smooth page transitions (MPA) ---------- */
   function setupPageTransitions() {
-    document.addEventListener('click', (event) => {
-      const link = event.target.closest('a.nav-link, a.brand');
-      if (!link || event.defaultPrevented) return;
-      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || link.target === '_blank') return;
-      const href = link.getAttribute('href');
-      if (!href || href.startsWith('#') || href.startsWith('javascript:')) return;
-      const url = new URL(href, window.location.href);
-      if (url.origin !== window.location.origin || url.pathname === window.location.pathname) return;
-      event.preventDefault();
-      document.body.classList.add('kh-page-leave');
-      setTimeout(() => { window.location.href = url.href; }, 170);
-    });
-    window.addEventListener('pageshow', () => document.body.classList.remove('kh-page-leave'));
+    // Navigation is kept instant and stable without artificial delay or jarring transform shifts
   }
 
   /* ---------- Topbar scroll state ---------- */

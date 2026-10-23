@@ -463,7 +463,7 @@ function getAttendanceLocation() {
 }
 function attendanceDisplayState(record = userAttendanceRecord) {
   if (!record) return 'Belum Absen';
-  if (record.state) return ({ working: 'Sedang Bekerja', on_break: 'Sedang Istirahat', completed: 'Selesai' })[record.state] || 'Belum Lengkap';
+  if (record.state) return ({ working: 'Sedang Bekerja', on_break: 'Sedang Istirahat', on_overtime: 'Sedang Lembur', completed: 'Selesai' })[record.state] || 'Belum Lengkap';
   return record.clockOut ? 'Selesai' : 'Sedang Bekerja';
 }
 function isActiveOvernightAttendance(record = userAttendanceRecord) {
@@ -577,9 +577,36 @@ async function performAttendanceTransition(action) {
           if (current.state !== 'on_break') throw new Error('Tidak ada istirahat yang sedang berlangsung.');
           sessions[sessions.length - 1].end = now.toISOString();
           current.state = 'working';
+        } else if (action === 'overtime_start') {
+          if (current.state === 'on_overtime') throw new Error('Sesi lembur sudah sedang berjalan.');
+          current.overtimeStartAt = now.toISOString();
+          current.state = 'on_overtime';
+          current.overtime = 'Sedang Berjalan';
+          current.overtimeApprovalStatus = 'in_progress';
+        } else if (action === 'overtime_end') {
+          if (current.state !== 'on_overtime') throw new Error('Tidak ada sesi lembur yang sedang berlangsung.');
+          const otStart = current.overtimeStartAt ? new Date(current.overtimeStartAt) : new Date(now.getTime() - 3600000);
+          const otMinutes = Math.max(1, Math.floor((now - otStart) / 60000));
+          current.overtimeEndAt = now.toISOString();
+          current.overtime = `${Math.floor(otMinutes / 60)}h ${String(otMinutes % 60).padStart(2, '0')}m`;
+          current.overtimeApprovalStatus = 'pending';
+          current.state = current.clockOut ? 'completed' : 'working';
+          attendanceReviewQueue.overtime.push({
+            id: `ot-${Date.now()}`,
+            employee_name: current.name || userProfile.name,
+            date: current.date,
+            overtime: current.overtime,
+            status: 'pending'
+          });
         } else if (action === 'clock_out') {
           if (current.state === 'on_break') {
             sessions[sessions.length - 1].end = now.toISOString();
+          }
+          if (current.state === 'on_overtime') {
+            const otStart = current.overtimeStartAt ? new Date(current.overtimeStartAt) : new Date(now.getTime() - 3600000);
+            const otMinutes = Math.max(1, Math.floor((now - otStart) / 60000));
+            current.overtime = `${Math.floor(otMinutes / 60)}h ${String(otMinutes % 60).padStart(2, '0')}m`;
+            current.overtimeApprovalStatus = 'pending';
           }
           current.clockOutAt = now.toISOString();
           current.clockOut = attendanceTimeLabel(now);
@@ -592,8 +619,10 @@ async function performAttendanceTransition(action) {
           const end = new Date(`${date}T${String(shift.end_time).slice(0, 5)}:00+07:00`);
           if (String(shift.end_time).slice(0, 5) <= String(shift.start_time).slice(0, 5)) end.setDate(end.getDate() + 1);
           const extra = Math.max(0, Math.floor((now - end) / 60000));
-          current.overtime = extra ? `${Math.floor(extra / 60)}h ${String(extra % 60).padStart(2, '0')}m` : '-';
-          current.overtimeApprovalStatus = extra ? 'pending' : 'not_required';
+          if (!current.overtime || current.overtime === '-' || current.overtime === 'Sedang Berjalan') {
+            current.overtime = extra ? `${Math.floor(extra / 60)}h ${String(extra % 60).padStart(2, '0')}m` : '-';
+            current.overtimeApprovalStatus = extra ? 'pending' : 'not_required';
+          }
         }
         current.breakSessions = sessions;
         current.location = location;
@@ -615,6 +644,8 @@ async function performAttendanceTransition(action) {
       clock_in: `Presensi masuk berhasil dicatat (${userAttendanceRecord.clockIn}) • Status: ${userAttendanceRecord.status === 'Late' ? 'Terlambat' : 'Tepat Waktu'}`,
       break_start: 'Waktu istirahat dimulai.',
       break_end: 'Selamat kembali bekerja! Waktu istirahat selesai.',
+      overtime_start: 'Sesi lembur dimulai! Jam lembur sedang dihitung.',
+      overtime_end: `Sesi lembur selesai (${userAttendanceRecord.overtime}). Menunggu persetujuan atasan.`,
       clock_out: `Presensi pulang berhasil dicatat (${userAttendanceRecord.clockOut}) • Durasi kerja: ${userAttendanceRecord.duration}`
     };
     showToast(actionToastMap[action] || `Status presensi diperbarui: ${attendanceDisplayState()}.`);
@@ -2568,6 +2599,12 @@ function pageMarkup(key) {
     const thisAssignment = attendancePolicy.assignments?.find(item => item.employee_id === thisEmployeeId);
     const assignedShift = attendancePolicy.shifts?.find(item => item.id === (userAttendanceRecord?.shiftId || thisAssignment?.shift_id)) || attendancePolicy.shifts?.[0] || null;
     const activeRecordToday = userAttendanceRecord && (userAttendanceRecord.dateKey === attendanceTodayKey() || isActiveOvernightAttendance(userAttendanceRecord));
+    const hasClockedIn = Boolean(activeRecordToday && userAttendanceRecord?.clockIn && userAttendanceRecord.clockIn !== '—');
+    const hasClockedOut = Boolean(activeRecordToday && userAttendanceRecord?.clockOut && userAttendanceRecord.clockOut !== '—');
+    const isOnOvertime = Boolean(activeRecordToday && userAttendanceRecord?.state === 'on_overtime');
+    const isWorking = Boolean(activeRecordToday && userAttendanceRecord?.state === 'working');
+    const canClockOut = Boolean(activeRecordToday && (isWorking || userAttendanceRecord?.state === 'on_break' || isOnOvertime) && !hasClockedOut);
+    const canStartOvertime = Boolean(activeRecordToday && hasClockedIn && !isOnOvertime);
     const transitionAction = !activeRecordToday ? 'clock_in'
       : userAttendanceRecord.state === 'on_break' ? 'break_end'
         : userAttendanceRecord.state === 'working' ? 'break_start'
@@ -2654,6 +2691,13 @@ function pageMarkup(key) {
                 </div>
               </div>
               <div class="att-meta-card">
+                <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></i>
+                <div class="att-meta-copy">
+                  <small>Lembur</small>
+                  <b>${isOnOvertime ? 'Sedang Berjalan' : safe(userAttendanceRecord?.overtime || '—')}</b>
+                </div>
+              </div>
+              <div class="att-meta-card">
                 <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></i>
                 <div class="att-meta-copy">
                   <small>Lokasi</small>
@@ -2663,22 +2707,36 @@ function pageMarkup(key) {
             </div>
           </div>
           <div class="attendance-live-actions">
-            <div class="att-cta-top-row">
-              <span class="att-cta-hint">${activeRecordToday && userAttendanceRecord?.state === 'working' ? 'Sedang bekerja aktif<br><strong>Jangan lupa absen pulang!</strong>' : activeRecordToday && userAttendanceRecord?.clockOut ? 'Terima kasih!<br><strong>Presensi hari ini lengkap</strong>' : 'Mulai hari kerja Anda dengan<br><strong>presensi terlebih dahulu!</strong>'}</span>
-              ${transitionAction ? `
-                <button class="att-main-cta-btn" data-action="attendance-transition" data-transition="${transitionAction}">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                  <span>${transitionLabel}</span>
-                </button>
-              ` : `<span class="att-main-cta-btn done">✓ Presensi Hari Ini Selesai</span>`}
-              ${activeRecordToday && userAttendanceRecord.state === 'working' ? `
-                <button class="att-main-cta-btn checkout" data-action="attendance-transition" data-transition="clock_out">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                  <span>Presensi Pulang</span>
-                </button>
-              ` : ''}
+            <div class="att-actions-control-grid">
+              <!-- 1. Absen Masuk -->
+              <button type="button" class="att-btn-action ${!hasClockedIn ? 'active-cta' : 'disabled-done'}" data-action="attendance-transition" data-transition="clock_in" ${hasClockedIn ? 'disabled' : ''}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                <span>${hasClockedIn ? `Masuk (${safe(userAttendanceRecord.clockIn)})` : 'Absen Masuk'}</span>
+              </button>
+
+              <!-- 2. Absen Keluar -->
+              <button type="button" class="att-btn-action ${canClockOut ? 'active-cta warning' : 'disabled-done'}" data-action="attendance-transition" data-transition="clock_out" ${!canClockOut ? 'disabled' : ''}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                <span>${hasClockedOut ? `Pulang (${safe(userAttendanceRecord.clockOut)})` : 'Absen Keluar'}</span>
+              </button>
+
+              <!-- 3. Mulai Lembur -->
+              <button type="button" class="att-btn-action ${canStartOvertime ? 'active-cta purple' : 'disabled-done'}" data-action="attendance-transition" data-transition="overtime_start" ${!canStartOvertime ? 'disabled' : ''}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>${isOnOvertime ? 'Lembur Aktif' : 'Mulai Lembur'}</span>
+              </button>
+
+              <!-- 4. Selesai Lembur -->
+              <button type="button" class="att-btn-action ${isOnOvertime ? 'active-cta amber pulse' : 'disabled-done'}" data-action="attendance-transition" data-transition="overtime_end" ${!isOnOvertime ? 'disabled' : ''}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                <span>Selesai Lembur</span>
+              </button>
             </div>
-            <div class="att-cta-sub-row">
+            <div class="att-cta-sub-row" style="margin-top:10px">
+              <button type="button" class="att-sub-btn primary-leave" data-action="toggle-att-leave" title="Formulir Pengajuan Izin Kerja">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                <span>+ Ajukan Izin Kerja</span>
+              </button>
               <button type="button" class="att-sub-btn" data-action="toggle-att-correction" title="Ajukan Koreksi Jam Kerja">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
                 <span>Ajukan Koreksi Presensi</span>
@@ -2690,6 +2748,57 @@ function pageMarkup(key) {
               </button>` : ''}
             </div>
           </div>
+        </div>
+
+        <!-- Drawer Pengajuan Izin Kerja -->
+        <div id="attLeaveDrawer" class="attendance-drawer" hidden>
+          <form data-attendance-leave-form class="attendance-drawer-form">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:10px">
+              <div>
+                <h4 style="margin:0;font-size:15px;color:#fff;display:flex;align-items:center;gap:8px">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+                  Formulir Pengajuan Izin Kerja
+                </h4>
+                <small style="color:rgba(255,255,255,0.75);font-size:12px">Ajukan permohonan izin atau cuti kerja kepada Atasan &amp; HRD</small>
+              </div>
+              <button type="button" class="module-button secondary" data-action="toggle-att-leave" style="padding:4px 10px;font-size:12px;height:28px">✕ Tutup</button>
+            </div>
+
+            <div class="dialog-two">
+              <label>Jenis Izin Kerja
+                <select name="leaveType" required style="cursor:pointer">
+                  <option value="Sakit">Sakit</option>
+                  <option value="Melahirkan">Melahirkan</option>
+                  <option value="Menikah">Menikah</option>
+                  <option value="Cuti">Cuti (Cuti Tahunan)</option>
+                  <option value="Lainnya">Lainnya</option>
+                </select>
+              </label>
+              <label>Lamanya Izin (Dihitung Otomatis)
+                <div id="leaveDurationBadge" style="display:flex;align-items:center;height:40px;padding:0 14px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);border-radius:8px;color:#fff;font-weight:800;font-size:13.5px">
+                  1 Hari
+                </div>
+              </label>
+            </div>
+
+            <div class="dialog-two">
+              <label>Tanggal Mulai Izin
+                <input type="date" name="startDate" id="leaveStartDate" value="${attendanceTodayKey()}" required />
+              </label>
+              <label>Tanggal Selesai Izin
+                <input type="date" name="endDate" id="leaveEndDate" value="${attendanceTodayKey()}" required />
+              </label>
+            </div>
+
+            <label>Keterangan / Alasan Izin
+              <textarea name="reason" rows="3" placeholder="Tuliskan keterangan lengkap pengajuan izin kerja Anda..." required style="resize:vertical"></textarea>
+            </label>
+
+            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+              <button type="button" class="module-button secondary" data-action="toggle-att-leave">Batal</button>
+              <button class="module-button primary" type="submit" style="background:#0962ea;color:#fff;font-weight:700;padding:0 20px">Kirim Pengajuan Izin</button>
+            </div>
+          </form>
         </div>
 
         <div id="attCorrectionDrawer" class="attendance-drawer" hidden>
@@ -2877,8 +2986,70 @@ function pageMarkup(key) {
       </section>
     `;
 
+    const myOwnEmpRow = getOwnEmployeeRow();
+    const myLeaveList = leaveRequests.filter(req => {
+      const targetName = (myOwnEmpRow?.[0] || userProfile.name || '').toLowerCase();
+      return String(req.name || '').toLowerCase() === targetName;
+    });
+
+    const personalLeaveHistoryHtml = `
+      <section class="module-card attendance-table-card" style="margin-top:16px">
+        <div class="att-table-card-head">
+          <div class="att-table-title">
+            <i class="att-title-icon" style="background:#eef2ff;color:#4f46e5"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></i>
+            <div>
+              <h2>Riwayat Pengajuan Izin Kerja &amp; Cuti</h2>
+              <small style="color:#64748b">Pelacakan status persetujuan pengajuan izin kerja Anda (${myLeaveList.length} permohonan)</small>
+            </div>
+          </div>
+          <div class="module-toolbar att-inline-toolbar">
+            <button type="button" class="module-button primary" data-action="toggle-att-leave" style="gap:6px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span>+ Ajukan Izin Baru</span>
+            </button>
+          </div>
+        </div>
+        <div class="module-table-wrap">
+          <table class="module-table">
+            <thead>
+              <tr>
+                <th>Tgl Pengajuan</th>
+                <th>Jenis Izin</th>
+                <th>Periode Izin</th>
+                <th>Lamanya</th>
+                <th>Keterangan</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${myLeaveList.length ? myLeaveList.map(item => `
+                <tr>
+                  <td><strong>${safe(item.submitDate || '-')}</strong></td>
+                  <td><span class="badge-role" style="font-weight:700">${safe(item.type)}</span></td>
+                  <td><b>${safe(item.period || `${item.startDate} s/d ${item.endDate || item.startDate}`)}</b></td>
+                  <td><span style="font-weight:700;color:#0962ea">${safe(item.duration)}</span></td>
+                  <td><span style="color:#475569;font-size:13px">${safe(item.reason || '-')}</span></td>
+                  <td>
+                    <span class="status-pill ${item.status === 'Approved' ? 'on-time' : item.status === 'Rejected' ? 'late' : 'blue'}" style="font-size:11px">
+                      ${item.status === 'Approved' ? '✓ Disetujui' : item.status === 'Rejected' ? '✕ Ditolak' : '⏳ Menunggu Persetujuan'}
+                    </span>
+                  </td>
+                </tr>
+              `).join('') : `
+                <tr>
+                  <td colspan="6" style="text-align:center;padding:24px;color:#94a3b8">
+                    Belum ada riwayat pengajuan izin kerja. Klik tombol <b>+ Ajukan Izin Baru</b> untuk membuat permohonan izin atau cuti.
+                  </td>
+                </tr>
+              `}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+
     if (isEmp) {
-      return selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml;
+      return selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml + personalLeaveHistoryHtml;
     }
 
     const adminTabsHtml = `
@@ -2895,7 +3066,7 @@ function pageMarkup(key) {
     `;
 
     if (attendanceActiveTab === 'self') {
-      return adminTabsHtml + selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml;
+      return adminTabsHtml + selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml + personalLeaveHistoryHtml;
     }
 
     const teamOverviewAndTableHtml = `
@@ -5425,6 +5596,62 @@ document.querySelector('#searchInput')?.addEventListener('input', (event) => {
 
 // Attendance policy and employee self-service forms
 document.addEventListener('submit', async (event) => {
+  const leaveForm = event.target.closest('[data-attendance-leave-form]');
+  if (leaveForm) {
+    event.preventDefault();
+    const data = new FormData(leaveForm);
+    const leaveType = String(data.get('leaveType') || '').trim();
+    const startDate = String(data.get('startDate') || '').trim();
+    const endDate = String(data.get('endDate') || '').trim();
+    const reason = String(data.get('reason') || '').trim();
+
+    if (!leaveType || !startDate || !endDate) {
+      showToast('Lengkapi jenis izin dan rentang tanggal.');
+      return;
+    }
+
+    const startMs = new Date(startDate).getTime();
+    const endMs = new Date(endDate).getTime();
+    if (isNaN(startMs) || isNaN(endMs) || endMs < startMs) {
+      showToast('Tanggal selesai izin tidak boleh lebih awal dari tanggal mulai.');
+      return;
+    }
+
+    const diffDays = Math.max(1, Math.round((endMs - startMs) / 86400000) + 1);
+    const ownEmp = getOwnEmployeeRow();
+    const newReq = {
+      id: `lv-${Date.now()}`,
+      name: userProfile.name,
+      title: ownEmp?.[3] || userProfile.role,
+      type: leaveType,
+      submitDate: new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+      period: `${startDate} s/d ${endDate}`,
+      startDate: startDate,
+      endDate: endDate,
+      duration: `${diffDays} Hari`,
+      reason: reason || 'Keperluan izin kerja',
+      status: 'Pending'
+    };
+
+    leaveRequests.unshift(newReq);
+    persistLeaveRequests();
+
+    if (window.KharismaDB?.isConnected && authenticatedSupabaseSession) {
+      window.KharismaDB.leave.submit(newReq).catch(() => {});
+    }
+
+    leaveForm.reset();
+    const drawer = moduleView.querySelector('#attLeaveDrawer');
+    if (drawer) drawer.hidden = true;
+
+    showToast(`Pengajuan izin ${leaveType} (${diffDays} Hari) berhasil dikirim dan menunggu persetujuan.`);
+    if (moduleView && !moduleView.hidden && moduleView.dataset.page === 'attendance') {
+      moduleView.innerHTML = pageMarkup('attendance');
+      setupTablePagination();
+    }
+    return;
+  }
+
   const correctionForm = event.target.closest('[data-attendance-correction]');
   if (correctionForm) {
     event.preventDefault();
@@ -5913,7 +6140,17 @@ mainContentArea.addEventListener('click', async (event) => {
     return;
   }
 
-  // Toggle Attendance Drawers (Correction & Admin Shift/Location Settings)
+  // Toggle Attendance Drawers (Leave Request, Correction & Admin Shift/Location Settings)
+  if (action === 'toggle-att-leave') {
+    const drawer = moduleView.querySelector('#attLeaveDrawer');
+    if (drawer) {
+      drawer.hidden = !drawer.hidden;
+      if (!drawer.hidden) {
+        drawer.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+    return;
+  }
   if (action === 'toggle-att-correction') {
     const drawer = moduleView.querySelector('#attCorrectionDrawer');
     if (drawer) drawer.hidden = !drawer.hidden;
@@ -7003,8 +7240,48 @@ mainContentArea.addEventListener('click', async (event) => {
   }
 });
 
+// Change event for datepickers inside modules
+moduleView.addEventListener('change', (event) => {
+  if (event.target.id === 'leaveStartDate' || event.target.id === 'leaveEndDate') {
+    const s = moduleView.querySelector('#leaveStartDate')?.value;
+    const e = moduleView.querySelector('#leaveEndDate')?.value;
+    const badge = moduleView.querySelector('#leaveDurationBadge');
+    if (badge && s && e) {
+      const sMs = new Date(s).getTime();
+      const eMs = new Date(e).getTime();
+      if (!isNaN(sMs) && !isNaN(eMs) && eMs >= sMs) {
+        const d = Math.max(1, Math.round((eMs - sMs) / 86400000) + 1);
+        badge.textContent = `${d} Hari`;
+        badge.style.color = '#fff';
+      } else if (eMs < sMs) {
+        badge.textContent = 'Tanggal tidak valid';
+        badge.style.color = '#fca5a5';
+      }
+    }
+  }
+});
+
 // Filter input inside modules
 moduleView.addEventListener('input', (event) => {
+  if (event.target.id === 'leaveStartDate' || event.target.id === 'leaveEndDate') {
+    const s = moduleView.querySelector('#leaveStartDate')?.value;
+    const e = moduleView.querySelector('#leaveEndDate')?.value;
+    const badge = moduleView.querySelector('#leaveDurationBadge');
+    if (badge && s && e) {
+      const sMs = new Date(s).getTime();
+      const eMs = new Date(e).getTime();
+      if (!isNaN(sMs) && !isNaN(eMs) && eMs >= sMs) {
+        const d = Math.max(1, Math.round((eMs - sMs) / 86400000) + 1);
+        badge.textContent = `${d} Hari`;
+        badge.style.color = '#fff';
+      } else if (eMs < sMs) {
+        badge.textContent = 'Tanggal tidak valid';
+        badge.style.color = '#fca5a5';
+      }
+    }
+    return;
+  }
+
   if (event.target.id === 'mailSearch') {
     renderMailList();
     const first = visibleMail()[0];

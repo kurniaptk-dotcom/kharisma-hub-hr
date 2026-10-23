@@ -3372,6 +3372,76 @@ body{color:var(--text);background:#f8fafc;font-size:14px;line-height:1.45}
 }
 #moduleView[data-page='attendance'] .att-sub-btn svg { color: #0962ea; }
 #moduleView[data-page='attendance'] .att-sub-btn:hover { background: #eaf2fd; }
+#moduleView[data-page='attendance'] .att-sub-btn.primary-leave {
+  background: #ffffff;
+  color: #0962ea;
+  font-weight: 800;
+  box-shadow: 0 4px 12px rgba(12, 30, 54, 0.12);
+}
+#moduleView[data-page='attendance'] .att-sub-btn.primary-leave:hover {
+  background: #eaf2fd;
+  transform: translateY(-1px);
+}
+#moduleView[data-page='attendance'] .att-actions-control-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+@media (max-width: 900px) {
+  #moduleView[data-page='attendance'] .att-actions-control-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+#moduleView[data-page='attendance'] .att-btn-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 44px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 12px;
+  font: 800 13px Manrope, sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 4px 12px rgba(12, 30, 54, 0.12);
+}
+#moduleView[data-page='attendance'] .att-btn-action.active-cta {
+  background: #ffffff;
+  color: #0962ea;
+}
+#moduleView[data-page='attendance'] .att-btn-action.active-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(12, 30, 54, 0.2);
+}
+#moduleView[data-page='attendance'] .att-btn-action.active-cta.warning {
+  background: #0c1e36;
+  color: #ffffff;
+}
+#moduleView[data-page='attendance'] .att-btn-action.active-cta.purple {
+  background: #4f46e5;
+  color: #ffffff;
+}
+#moduleView[data-page='attendance'] .att-btn-action.active-cta.amber {
+  background: #f59e0b;
+  color: #0c1e36;
+}
+#moduleView[data-page='attendance'] .att-btn-action.active-cta.amber.pulse {
+  animation: pulse-att-glow 2s infinite;
+}
+@keyframes pulse-att-glow {
+  0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.6); }
+  70% { box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+}
+#moduleView[data-page='attendance'] .att-btn-action.disabled-done {
+  background: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: not-allowed;
+  box-shadow: none;
+}
 #moduleView[data-page='attendance'] .attendance-drawer {
   position: relative;
   z-index: 1;
@@ -3626,14 +3696,12 @@ body{color:var(--text);background:#f8fafc;font-size:14px;line-height:1.45}
 
 /* ---------- Page enter / leave ---------- */
 @keyframes khPageIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: none; }
+  from { opacity: 0.85; }
+  to { opacity: 1; }
 }
-.main-content { animation: khPageIn 380ms var(--kh-ease) both; }
+.main-content { animation: khPageIn 120ms var(--kh-ease) both; }
 body.kh-page-leave .main-content {
-  opacity: 0;
-  transform: translateY(-4px);
-  transition: opacity 160ms ease, transform 160ms ease;
+  opacity: 0.85;
 }
 
 /* ---------- Sticky topbar with scroll state ---------- */

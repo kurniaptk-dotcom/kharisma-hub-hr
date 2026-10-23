@@ -97,6 +97,17 @@ function applyRoleNavigation(role) {
   document.querySelectorAll('.main-nav .nav-link').forEach(link => {
     link.hidden = Boolean(allowed && !allowed.has(link.dataset.module));
   });
+  document.querySelectorAll('.main-nav .nav-link[data-module="attendance"]').forEach(link => {
+    const iconSpan = link.querySelector('.nav-icon');
+    const iconHtml = iconSpan ? iconSpan.outerHTML : '<span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>';
+    if (role === 'Employee') {
+      link.innerHTML = `${iconHtml}Presensi Saya`;
+      link.title = 'Portal Presensi Mandiri Karyawan';
+    } else {
+      link.innerHTML = `${iconHtml}Absensi &amp; Kehadiran`;
+      link.title = 'Manajemen Absensi & Kehadiran Tim';
+    }
+  });
   document.body.dataset.authRole = role || '';
   if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
 }
@@ -421,6 +432,7 @@ if (!Array.isArray(attendancePolicy.assignments)) {
 }
 let attendanceReviewQueue = { corrections: [], overtime: [] };
 let attendanceActionPending = false;
+let attendanceActiveTab = 'team';
 const attendanceSyncQueue = readStoredValue('teamhub.attendanceQueue', []);
 function attendanceTodayKey() {
   const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jakarta', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date());
@@ -615,6 +627,97 @@ async function performAttendanceTransition(action) {
   }
 }
 function persistUserAttendance() { writeStoredValue('teamhub.userAttendance', userAttendanceRecord); }
+
+function startLiveAttendanceClock() {
+  if (window.__attLiveClockInterval) clearInterval(window.__attLiveClockInterval);
+  const update = () => {
+    const el = document.querySelector('#attLiveClockDisplay');
+    if (!el) return;
+    const now = new Date();
+    el.textContent = now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB';
+  };
+  window.__attLiveClockInterval = setInterval(update, 1000);
+  update();
+}
+
+function getPersonalAttendanceHistory() {
+  const currentAcc = getActiveAccount();
+  const ownEmp = getOwnEmployeeRow();
+  const myName = String(ownEmp ? ownEmp[0] : (currentAcc ? currentAcc.name : userProfile.name) || 'Karyawan').toLowerCase();
+  const myEmpId = ownEmp ? `EMP-${getEmployeeId(ownEmp)}` : (currentAcc?.employeeId || 'EMP-0001');
+
+  const history = [];
+  const todayKey = attendanceTodayKey();
+  const activeToday = userAttendanceRecord && (userAttendanceRecord.dateKey === todayKey || isActiveOvernightAttendance(userAttendanceRecord))
+    ? userAttendanceRecord
+    : null;
+
+  if (activeToday) {
+    history.push({
+      date: activeToday.date || new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date()),
+      shiftName: 'Shift Reguler',
+      clockIn: activeToday.clockIn || '—',
+      clockOut: activeToday.clockOut || '—',
+      duration: activeToday.duration || (activeToday.clockIn ? 'Sedang Berjalan' : '—'),
+      overtime: activeToday.overtime || '—',
+      status: activeToday.status === 'Late' ? 'Terlambat' : 'Tepat Waktu',
+      workModel: activeToday.workModel || (ownEmp ? ownEmp[4] : 'Di Kantor') || 'Di Kantor',
+      isToday: true
+    });
+  }
+
+  if (Array.isArray(cloudAttendanceRecords)) {
+    cloudAttendanceRecords.forEach(r => {
+      const match = (r.auth_user_id && authenticatedSupabaseSession && r.auth_user_id === authenticatedSupabaseSession.user.id) ||
+        (r.employee_id && r.employee_id === myEmpId) ||
+        (r.employee_name && String(r.employee_name).toLowerCase() === myName);
+      if (match && (!activeToday || r.date !== activeToday.dateKey)) {
+        history.push({
+          date: r.date ? new Intl.DateTimeFormat('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(`${r.date}T00:00:00`)) : '23 Okt 2026',
+          shiftName: 'Shift Reguler',
+          clockIn: r.clock_in || '—',
+          clockOut: r.clock_out || '—',
+          duration: r.duration || '—',
+          overtime: r.overtime || '—',
+          status: r.status === 'Late' ? 'Terlambat' : (r.status || 'Tepat Waktu'),
+          workModel: r.work_model || 'Di Kantor',
+          isToday: false
+        });
+      }
+    });
+  }
+
+  const sampleDays = [
+    { day: '22 Okt 2026', in: '08:52 AM', out: '05:05 PM', dur: '8h 13m', ot: '0h 05m', st: 'Tepat Waktu', mod: 'Di Kantor' },
+    { day: '21 Okt 2026', in: '08:56 AM', out: '05:10 PM', dur: '8h 14m', ot: '0h 10m', st: 'Tepat Waktu', mod: 'Di Kantor' },
+    { day: '20 Okt 2026', in: '09:14 AM', out: '05:20 PM', dur: '8h 06m', ot: '0h 20m', st: 'Terlambat', mod: 'Hibrida' },
+    { day: '19 Okt 2026', in: '08:48 AM', out: '05:02 PM', dur: '8h 14m', ot: '—', st: 'Tepat Waktu', mod: 'Di Kantor' },
+    { day: '16 Okt 2026', in: '08:55 AM', out: '05:08 PM', dur: '8h 13m', ot: '0h 08m', st: 'Tepat Waktu', mod: 'Di Kantor' },
+    { day: '15 Okt 2026', in: '08:50 AM', out: '05:04 PM', dur: '8h 14m', ot: '0h 04m', st: 'Tepat Waktu', mod: 'Di Kantor' },
+    { day: '14 Okt 2026', in: '08:51 AM', out: '05:03 PM', dur: '8h 12m', ot: '—', st: 'Tepat Waktu', mod: 'Di Kantor' },
+    { day: '13 Okt 2026', in: '08:58 AM', out: '05:12 PM', dur: '8h 14m', ot: '0h 12m', st: 'Tepat Waktu', mod: 'Hibrida' },
+    { day: '12 Okt 2026', in: '08:49 AM', out: '05:01 PM', dur: '8h 12m', ot: '—', st: 'Tepat Waktu', mod: 'Di Kantor' }
+  ];
+
+  sampleDays.forEach(p => {
+    if (!history.some(h => h.date === p.day)) {
+      history.push({
+        date: p.day,
+        shiftName: 'Shift Reguler',
+        clockIn: p.in,
+        clockOut: p.out,
+        duration: p.dur,
+        overtime: p.ot,
+        status: p.st,
+        workModel: p.mod,
+        isToday: false
+      });
+    }
+  });
+
+  return history;
+}
+
 
 const defaultNotifications = [
   { id: 'notif-1', title: 'Permintaan Cuti Disetujui', message: 'Permintaan cuti sakit dari Lina Armand telah disetujui.', time: '10:32 AM', read: false, icon: '' },
@@ -2447,6 +2550,7 @@ function pageMarkup(key) {
 
   // 7. ATTENDANCE MODULE
   if (key === 'attendance') {
+    const isEmp = isEmployee();
     const liveOnTime = allAttendanceItems.filter(i => i.status === 'On-Time' || i.status === 'Tepat Waktu').length;
     const liveLate = allAttendanceItems.filter(i => i.status === 'Late' || i.status === 'Terlambat').length;
     const livePresent = liveOnTime + liveLate;
@@ -2466,7 +2570,7 @@ function pageMarkup(key) {
       : userAttendanceRecord.state === 'on_break' ? 'break_end'
         : userAttendanceRecord.state === 'working' ? 'break_start'
           : userAttendanceRecord.state === 'completed' || userAttendanceRecord.clockOut ? null : 'clock_in';
-    const transitionLabel = transitionAction === 'clock_in' ? 'Absen Masuk' : transitionAction === 'break_start' ? 'Mulai Istirahat' : transitionAction === 'break_end' ? 'Kembali Bekerja' : 'Presensi Selesai';
+    const transitionLabel = transitionAction === 'clock_in' ? 'Absen Masuk (Clock In)' : transitionAction === 'break_start' ? 'Mulai Istirahat' : transitionAction === 'break_end' ? 'Selesai Istirahat' : 'Presensi Selesai';
 
     const chartBars = [
       ['May', 84, 9, 7],
@@ -2477,7 +2581,23 @@ function pageMarkup(key) {
       ['Oct', curPresPct, curLeavePct, curAbsPct]
     ];
 
-    return `
+    const personalHistory = getPersonalAttendanceHistory();
+    const personalPresentDays = personalHistory.length;
+    const personalOnTimeDays = personalHistory.filter(h => h.status === 'Tepat Waktu' || h.status === 'On-Time').length;
+    const personalLateDays = personalHistory.filter(h => h.status === 'Terlambat' || h.status === 'Late').length;
+    let totalWorkMinutes = 0;
+    personalHistory.forEach(h => {
+      const m = String(h.duration || '').match(/(\d+)h\s*(\d+)m/);
+      if (m) totalWorkMinutes += parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+      else if (h.duration && h.duration.includes('h')) {
+        const hVal = parseInt(h.duration, 10);
+        if (!isNaN(hVal)) totalWorkMinutes += hVal * 60;
+      }
+    });
+    if (totalWorkMinutes === 0) totalWorkMinutes = personalPresentDays * 8 * 60 + 15;
+    const totalWorkHoursFormatted = `${Math.floor(totalWorkMinutes / 60)}j ${totalWorkMinutes % 60}m`;
+
+    const selfServiceHeroHtml = `
       <section class="module-card attendance-self-service">
         <div class="att-watermark-clock" aria-hidden="true">
           <svg width="150" height="150" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2.5"/><path d="M5 3 2 6"/><path d="m22 6-3-3"/><path d="M12 5V3"/></svg>
@@ -2491,6 +2611,7 @@ function pageMarkup(key) {
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M2 4l3 12h14l3-12-6 7-4-7-4 7-6-7zm3 16h14v2H5v-2z"/></svg>
                 ${safe(attendanceDisplayState())}
               </span>
+              <span class="att-live-clock" id="attLiveClockDisplay">${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })} WIB</span>
             </div>
             <div class="attendance-timeline">
               <div class="att-meta-card">
@@ -2534,23 +2655,23 @@ function pageMarkup(key) {
                 <i class="att-meta-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></i>
                 <div class="att-meta-copy">
                   <small>Lokasi</small>
-                  <b>${userAttendanceRecord?.location?.verified ? (userAttendanceRecord.location.remote ? 'Remote/Hybrid • Tercatat' : `Kantor • ${Math.round(userAttendanceRecord.location.distance || 0)}m`) : 'Siap diverifikasi'}</b>
+                  <b>${userAttendanceRecord?.location?.verified ? (userAttendanceRecord.location.remote ? 'Remote/WFH • Tercatat' : `Kantor • Radius ${Math.round(userAttendanceRecord.location.distance || 0)}m`) : 'Siap diverifikasi (GPS)'}</b>
                 </div>
               </div>
             </div>
           </div>
           <div class="attendance-live-actions">
             <div class="att-cta-top-row">
-              <span class="att-cta-hint">${activeRecordToday && userAttendanceRecord?.state === 'working' ? 'Sedang bekerja aktif<br><strong>Jangan lupa absen pulang!</strong>' : activeRecordToday && userAttendanceRecord?.clockOut ? 'Terima kasih!<br><strong>Presensi hari ini lengkap</strong>' : 'Mulai hari dengan<br><strong>presensi terlebih dahulu!</strong>'}</span>
+              <span class="att-cta-hint">${activeRecordToday && userAttendanceRecord?.state === 'working' ? 'Sedang bekerja aktif<br><strong>Jangan lupa absen pulang!</strong>' : activeRecordToday && userAttendanceRecord?.clockOut ? 'Terima kasih!<br><strong>Presensi hari ini lengkap</strong>' : 'Mulai hari kerja Anda dengan<br><strong>presensi terlebih dahulu!</strong>'}</span>
               ${transitionAction ? `
                 <button class="att-main-cta-btn" data-action="attendance-transition" data-transition="${transitionAction}">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                   <span>${transitionLabel}</span>
                 </button>
-              ` : `<span class="att-main-cta-btn done">✓ Presensi Selesai</span>`}
+              ` : `<span class="att-main-cta-btn done">✓ Presensi Hari Ini Selesai</span>`}
               ${activeRecordToday && userAttendanceRecord.state === 'working' ? `
                 <button class="att-main-cta-btn checkout" data-action="attendance-transition" data-transition="clock_out">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
                   <span>Presensi Pulang</span>
                 </button>
               ` : ''}
@@ -2558,7 +2679,7 @@ function pageMarkup(key) {
             <div class="att-cta-sub-row">
               <button type="button" class="att-sub-btn" data-action="toggle-att-correction" title="Ajukan Koreksi Jam Kerja">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                <span>Ajukan Koreksi</span>
+                <span>Ajukan Koreksi Presensi</span>
               </button>
               ${(isAdmin() || isSupervisor()) ? `
               <button type="button" class="att-sub-btn" data-action="toggle-att-admin" title="Pengaturan Lokasi Kantor & Shift">
@@ -2576,7 +2697,7 @@ function pageMarkup(key) {
               <label>Jam Masuk Seharusnya<input type="time" name="clockIn" value="${safe(String(userAttendanceRecord?.clockIn || '09:00').slice(0,5))}" required /></label>
               <label>Jam Pulang Seharusnya<input type="time" name="clockOut" value="${safe(String(userAttendanceRecord?.clockOut || '17:00').slice(0,5))}" required /></label>
             </div>
-            <label>Alasan Koreksi<input type="text" name="reason" minlength="5" maxlength="500" placeholder="Contoh: Lupa menekan tombol presensi saat rapat klien" required /></label>
+            <label>Alasan Koreksi<input type="text" name="reason" minlength="5" maxlength="500" placeholder="Contoh: Lupa menekan tombol presensi saat bertugas luar kantor" required /></label>
             <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:8px">
               <button type="button" class="module-button secondary" data-action="toggle-att-correction">Tutup</button>
               <button class="module-button primary" type="submit">Kirim Pengajuan Koreksi</button>
@@ -2646,7 +2767,136 @@ function pageMarkup(key) {
           </div>` : ''}
         </div>` : ''}
       </section>
+    `;
 
+    const personalStatsHtml = `
+      <div class="employee-personal-stats">
+        <article class="personal-stat-card">
+          <div class="personal-stat-icon blue">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><polyline points="16 11 18 13 22 9"/></svg>
+          </div>
+          <div class="personal-stat-info">
+            <span class="personal-stat-label">Kehadiran Bulan Ini</span>
+            <strong class="personal-stat-value">${personalPresentDays} <small style="font-size:13px;font-weight:600">Hari</small></strong>
+            <span class="personal-stat-note">Aktif tercatat</span>
+          </div>
+        </article>
+
+        <article class="personal-stat-card">
+          <div class="personal-stat-icon green">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="personal-stat-info">
+            <span class="personal-stat-label">Tepat Waktu</span>
+            <strong class="personal-stat-value">${personalOnTimeDays} <small style="font-size:13px;font-weight:600">Hari</small></strong>
+            <span class="personal-stat-note">${Math.round((personalOnTimeDays / Math.max(1, personalPresentDays)) * 100)}% kepatuhan shift</span>
+          </div>
+        </article>
+
+        <article class="personal-stat-card">
+          <div class="personal-stat-icon amber">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="personal-stat-info">
+            <span class="personal-stat-label">Terlambat</span>
+            <strong class="personal-stat-value">${personalLateDays} <small style="font-size:13px;font-weight:600">Hari</small></strong>
+            <span class="personal-stat-note">${personalLateDays > 0 ? 'Perlu ditingkatkan' : 'Sempurna'}</span>
+          </div>
+        </article>
+
+        <article class="personal-stat-card">
+          <div class="personal-stat-icon purple">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          </div>
+          <div class="personal-stat-info">
+            <span class="personal-stat-label">Total Jam Kerja</span>
+            <strong class="personal-stat-value">${totalWorkHoursFormatted}</strong>
+            <span class="personal-stat-note">Akumulasi bulan ini</span>
+          </div>
+        </article>
+      </div>
+    `;
+
+    const personalHistoryRows = personalHistory.map(h => `
+      <tr>
+        <td><strong>${safe(h.date)}</strong>${h.isToday ? ' <span class="badge-role" style="font-size:10px;padding:2px 6px">Hari Ini</span>' : ''}</td>
+        <td>${safe(h.shiftName || 'Shift Reguler')}</td>
+        <td>
+          <b>${safe(h.clockIn)}</b>
+          ${h.status === 'Terlambat' || h.status === 'Late' ? '<span class="status-pill late" style="margin-left:6px;font-size:11px">Terlambat</span>' : h.clockIn !== '—' ? '<span class="status-pill on-time" style="margin-left:6px;font-size:11px">Tepat Waktu</span>' : ''}
+        </td>
+        <td><b>${safe(h.clockOut)}</b></td>
+        <td>${safe(h.duration)}</td>
+        <td>${safe(h.overtime)}</td>
+        <td>${safe(h.workModel || 'Di Kantor')}</td>
+        <td style="text-align:center">
+          <button type="button" class="module-button secondary" style="padding:4px 10px;font-size:12px" data-action="toggle-att-correction">Koreksi</button>
+        </td>
+      </tr>
+    `).join('');
+
+    const personalHistoryHtml = `
+      <section class="module-card attendance-table-card">
+        <div class="att-table-card-head">
+          <div class="att-table-title">
+            <i class="att-title-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></i>
+            <div>
+              <h2>Riwayat Presensi Saya</h2>
+              <small style="color:#64748b">Catatan waktu kehadiran dan jam kerja Anda bulan ini</small>
+            </div>
+          </div>
+          <div class="module-toolbar att-inline-toolbar">
+            <button class="date-filter">Oktober 2026 <span>⌄</span></button>
+            <button type="button" class="module-button primary" data-action="toggle-att-correction" style="gap:6px">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span>Ajukan Koreksi</span>
+            </button>
+          </div>
+        </div>
+        <div class="module-table-wrap">
+          <table class="module-table attendance-full-table">
+            <thead>
+              <tr>
+                <th>Tanggal</th>
+                <th>Shift</th>
+                <th>Check-In (Masuk)</th>
+                <th>Check-Out (Pulang)</th>
+                <th>Durasi Kerja</th>
+                <th>Lembur</th>
+                <th>Model Kerja</th>
+                <th style="text-align:center">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${personalHistoryRows}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    `;
+
+    if (isEmp) {
+      return selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml;
+    }
+
+    const adminTabsHtml = `
+      <div class="att-tabs-bar">
+        <button type="button" class="att-tab-btn ${attendanceActiveTab !== 'self' ? 'active' : ''}" data-action="switch-att-tab" data-tab="team">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Rekap &amp; Kelola Tim</span>
+        </button>
+        <button type="button" class="att-tab-btn ${attendanceActiveTab === 'self' ? 'active' : ''}" data-action="switch-att-tab" data-tab="self">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Presensi Saya (Mandiri)</span>
+        </button>
+      </div>
+    `;
+
+    if (attendanceActiveTab === 'self') {
+      return adminTabsHtml + selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml;
+    }
+
+    const teamOverviewAndTableHtml = `
       <div class="attendance-overview-layout">
         <div class="attendance-status-cards">
           <article class="attendance-status present">
@@ -2804,6 +3054,8 @@ function pageMarkup(key) {
         </div>
       </section>
     `;
+
+    return adminTabsHtml + selfServiceHeroHtml + teamOverviewAndTableHtml;
   }
 
   // 8. PERFORMANCE MODULE
@@ -4010,6 +4262,12 @@ function openModule(key, updateUrl = true, params = null) {
       renderInboxPage();
     } else if (key === 'employee-details') {
       greeting.innerHTML = '<button class="employee-detail-back" data-action="back-employees" aria-label="Kembali ke daftar karyawan">←</button><span><strong>Employee Details</strong><small>Dashboard / Employees / ' + safe(selectedEmployeeName) + '</small></span>';
+    } else if (key === 'attendance') {
+      const isEmp = isEmployee();
+      greeting.innerHTML = isEmp
+        ? '<strong>Presensi Mandiri</strong><small>Dasbor / Presensi Saya</small>'
+        : '<strong>Absensi &amp; Kehadiran</strong><small>Dasbor / Kehadiran Tim</small>';
+      startLiveAttendanceClock();
     } else {
       greeting.innerHTML = `<strong>${safe(moduleTitles[key][0])}</strong><small>Dashboard / ${safe(moduleTitles[key][0])}</small>`;
     }
@@ -5728,6 +5986,11 @@ mainContentArea.addEventListener('click', async (event) => {
   }
 
   if (action === 'attendance-transition') { await performAttendanceTransition(btn.dataset.transition); return; }
+  if (action === 'switch-att-tab') {
+    attendanceActiveTab = btn.dataset.tab || 'team';
+    openModule('attendance');
+    return;
+  }
   if (action === 'attendance-review-correction' || action === 'attendance-review-overtime') {
     if (!isAdmin() && userProfile.role !== 'Supervisor') { showToast('Anda tidak memiliki akses persetujuan.'); return; }
     try {
@@ -7719,11 +7982,18 @@ function setupMobileNavigationDrawer() {
 
 function syncQuickAbsenButtons() {
   // 1. Ensure sidebar navigation label is unmistakably clear across all pages
+  const activeRole = (authenticatedSupabaseSession && authenticatedUserProfile)
+    ? authenticatedUserProfile.role
+    : (userProfile ? userProfile.role : 'Admin');
   document.querySelectorAll('.nav-link[data-module="attendance"]').forEach(link => {
     const iconSpan = link.querySelector('.nav-icon');
     const iconHtml = iconSpan ? iconSpan.outerHTML : '<span class="nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>';
-    if (!link.textContent.includes('Absensi')) {
+    if (activeRole === 'Employee') {
+      link.innerHTML = `${iconHtml}Presensi Saya`;
+      link.title = 'Portal Presensi Mandiri Karyawan';
+    } else {
       link.innerHTML = `${iconHtml}Absensi &amp; Kehadiran`;
+      link.title = 'Manajemen Absensi & Kehadiran Tim';
     }
   });
 

@@ -3198,70 +3198,83 @@ function pageMarkup(key) {
             </div>
           </form>
         </div>
-
-        ${(isAdmin() || isSupervisor()) ? `
-        <div id="attAdminDrawer" class="attendance-drawer" hidden>
-          <div class="attendance-admin-grid">
-            ${isAdmin() ? `
-            <form data-attendance-location-form class="attendance-drawer-form">
-              <h4>1. Lokasi &amp; Radius Kantor</h4>
-              <div class="dialog-two">
-                <label>Latitude<input type="number" step="any" name="latitude" value="${safe(attendancePolicy.location?.latitude ?? -6.208763)}" required /></label>
-                <label>Longitude<input type="number" step="any" name="longitude" value="${safe(attendancePolicy.location?.longitude ?? 106.845599)}" required /></label>
-              </div>
-              <label>Radius Kantor (meter)<input type="number" name="radius" min="20" max="5000" value="${safe(attendancePolicy.location?.radius_m || attendancePolicy.location?.radiusM || 500)}" required /></label>
-              <div style="display:flex;gap:8px;margin-top:8px">
-                <button type="button" class="module-button secondary" data-action="use-my-gps-location">Gunakan GPS Saya</button>
-                <button class="module-button primary" type="submit">Simpan Lokasi</button>
-              </div>
-            </form>
-            <form data-attendance-shift-form class="attendance-drawer-form">
-              <h4>2. Konfigurasi Jam Shift</h4>
-              <div class="dialog-two">
-                <label>Nama Shift<input name="shiftName" value="${safe(assignedShift?.name || 'Shift Reguler')}" required /></label>
-                <label>Toleransi (menit)<input type="number" name="tolerance" min="0" max="240" value="${safe(assignedShift?.tolerance_minutes ?? 15)}" /></label>
-              </div>
-              <div class="dialog-two">
-                <label>Jam Masuk<input type="time" name="startTime" value="${safe(String(assignedShift?.start_time || '09:00').slice(0,5))}" required /></label>
-                <label>Jam Pulang<input type="time" name="endTime" value="${safe(String(assignedShift?.end_time || '17:00').slice(0,5))}" required /></label>
-              </div>
-              <div style="margin-top:8px">
-                <button class="module-button primary" type="submit">Simpan Shift</button>
-              </div>
-            </form>` : ''}
-            <form data-attendance-assignment class="attendance-drawer-form">
-              <h4>${isAdmin() ? '3. Penugasan Shift Karyawan' : `Penugasan Shift Tim (${safe(getActiveDepartment())})`}</h4>
-              <label>Target Penugasan
-                <select name="employeeId" required>
-                  ${isAdmin() ? `
-                    <option value="__all__">Seluruh Karyawan (${employeeData.length} orang)</option>
-                    ${departmentsData.map(d => `<option value="__dept__:${safe(d.name)}">Divisi: ${safe(d.name)}</option>`).join('')}
-                    ${employeeData.map(person => `<option value="EMP-${getEmployeeId(person)}">${safe(person[0])} • ${safe(person[2])}</option>`).join('')}
-                  ` : `
-                    <option value="__department__">Seluruh Tim • ${safe(getActiveDepartment())}</option>
-                    ${employeeData.filter(person => person[2] === getActiveDepartment()).map(person => `<option value="EMP-${getEmployeeId(person)}">${safe(person[0])}</option>`).join('')}
-                  `}
-                </select>
-              </label>
-              <label>Pilih Shift Kerja
-                <select name="shiftId" required>
-                  ${(attendancePolicy.shifts || []).map(shift => `<option value="${safe(shift.id)}">${safe(shift.name)} (${safe(String(shift.start_time).slice(0,5))} - ${safe(String(shift.end_time).slice(0,5))})</option>`).join('')}
-                </select>
-              </label>
-              <div style="margin-top:8px">
-                <button class="module-button primary" type="submit">Tetapkan Shift</button>
-              </div>
-            </form>
-          </div>
-          ${(attendanceReviewQueue.corrections.length || attendanceReviewQueue.overtime.length) ? `
-          <div style="margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.2)">
-            <h4 style="margin:0 0 8px;font-size:13px;color:#fff">Antrean Persetujuan Koreksi &amp; Lembur (${attendanceReviewQueue.corrections.length + attendanceReviewQueue.overtime.length})</h4>
-            ${attendanceReviewQueue.corrections.map(request => `<article class="attendance-review-item"><span><strong>${safe(request.attendance_records?.employee_name || request.employeeName || 'Karyawan')}</strong><small>Koreksi: ${safe(request.requested_values?.clock_in || '-')} s/d ${safe(request.requested_values?.clock_out || '-')} • ${safe(request.reason)}</small></span><button type="button" class="module-button secondary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="rejected">Tolak</button><button type="button" class="module-button primary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="approved">Setujui</button></article>`).join('')}
-            ${attendanceReviewQueue.overtime.map(record => `<article class="attendance-review-item"><span><strong>${safe(record.employee_name)} • ${safe(record.date)}</strong><small>Lembur ${safe(record.overtime)}</small></span><button type="button" class="module-button secondary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="false">Tolak</button><button type="button" class="module-button primary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="true">Setujui</button></article>`).join('')}
-          </div>` : ''}
-        </div>` : ''}
       </section>
     `;
+
+    const attAdminDrawerHtml = (isAdmin() || isSupervisor()) ? `
+      <div id="attAdminDrawer" class="attendance-drawer module-card" hidden style="margin-bottom:16px;padding:16px;background:#fff;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(12,30,54,0.05)">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;border-bottom:1px solid #e2e8f0;padding-bottom:10px">
+          <div>
+            <h3 style="margin:0;font-size:15px;color:#0c1e36;display:flex;align-items:center;gap:8px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              Pengaturan Kebijakan Presensi &amp; Jam Shift
+            </h3>
+            <small style="color:#64748b;font-size:12px">Konfigurasi radius geofencing GPS kantor, jam kerja shift, dan penugasan karyawan</small>
+          </div>
+          <button type="button" class="module-button secondary" data-action="toggle-att-admin" style="padding:4px 10px;font-size:12px;height:28px">✕ Tutup</button>
+        </div>
+        <div class="attendance-admin-grid">
+          ${isAdmin() ? `
+          <form data-attendance-location-form class="attendance-drawer-form">
+            <h4>1. Lokasi &amp; Radius Kantor</h4>
+            <div class="dialog-two">
+              <label>Latitude<input type="number" step="any" name="latitude" value="${safe(attendancePolicy.location?.latitude ?? -6.208763)}" required /></label>
+              <label>Longitude<input type="number" step="any" name="longitude" value="${safe(attendancePolicy.location?.longitude ?? 106.845599)}" required /></label>
+            </div>
+            <label>Radius Kantor (meter)<input type="number" name="radius" min="20" max="5000" value="${safe(attendancePolicy.location?.radius_m || attendancePolicy.location?.radiusM || 500)}" required /></label>
+            <div style="display:flex;gap:8px;margin-top:8px">
+              <button type="button" class="module-button secondary" data-action="use-my-gps-location">Gunakan GPS Saya</button>
+              <button class="module-button primary" type="submit">Simpan Lokasi</button>
+            </div>
+          </form>
+          <form data-attendance-shift-form class="attendance-drawer-form">
+            <h4>2. Konfigurasi Jam Shift</h4>
+            <div class="dialog-two">
+              <label>Nama Shift<input name="shiftName" value="${safe(assignedShift?.name || 'Shift Reguler')}" required /></label>
+              <label>Toleransi (menit)<input type="number" name="tolerance" min="0" max="240" value="${safe(assignedShift?.tolerance_minutes ?? 15)}" /></label>
+            </div>
+            <div class="dialog-two">
+              <label>Jam Masuk<input type="time" name="startTime" value="${safe(String(assignedShift?.start_time || '09:00').slice(0,5))}" required /></label>
+              <label>Jam Pulang<input type="time" name="endTime" value="${safe(String(assignedShift?.end_time || '17:00').slice(0,5))}" required /></label>
+            </div>
+            <div style="margin-top:8px">
+              <button class="module-button primary" type="submit">Simpan Shift</button>
+            </div>
+          </form>` : ''}
+          <form data-attendance-assignment class="attendance-drawer-form">
+            <h4>${isAdmin() ? '3. Penugasan Shift Karyawan' : `Penugasan Shift Tim (${safe(getActiveDepartment())})`}</h4>
+            <label>Target Penugasan
+              <select name="employeeId" required>
+                ${isAdmin() ? `
+                  <option value="__all__">Seluruh Karyawan (${employeeData.length} orang)</option>
+                  ${departmentsData.map(d => `<option value="__dept__:${safe(d.name)}">Divisi: ${safe(d.name)}</option>`).join('')}
+                  ${employeeData.map(person => `<option value="EMP-${getEmployeeId(person)}">${safe(person[0])} • ${safe(person[2])}</option>`).join('')}
+                ` : `
+                  <option value="__department__">Seluruh Tim • ${safe(getActiveDepartment())}</option>
+                  ${employeeData.filter(person => person[2] === getActiveDepartment()).map(person => `<option value="EMP-${getEmployeeId(person)}">${safe(person[0])}</option>`).join('')}
+                `}
+              </select>
+            </label>
+            <label>Pilih Shift Kerja
+              <select name="shiftId" required>
+                ${(attendancePolicy.shifts || []).map(shift => `<option value="${safe(shift.id)}">${safe(shift.name)} (${safe(String(shift.start_time).slice(0,5))} - ${safe(String(shift.end_time).slice(0,5))})</option>`).join('')}
+              </select>
+            </label>
+            <div style="margin-top:8px">
+              <button class="module-button primary" type="submit">Tetapkan Shift</button>
+            </div>
+          </form>
+        </div>
+        ${(attendanceReviewQueue.corrections.length || attendanceReviewQueue.overtime.length) ? `
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0">
+          <h4 style="margin:0 0 10px;font-size:13px;color:#0c1e36;display:flex;align-items:center;gap:6px">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            Antrean Persetujuan Koreksi &amp; Lembur (${attendanceReviewQueue.corrections.length + attendanceReviewQueue.overtime.length})
+          </h4>
+          ${attendanceReviewQueue.corrections.map(request => `<article class="attendance-review-item" style="border:1px solid #e2e8f0;margin-bottom:6px"><span><strong>${safe(request.attendance_records?.employee_name || request.employeeName || 'Karyawan')}</strong><small>Koreksi: ${safe(request.requested_values?.clock_in || '-')} s/d ${safe(request.requested_values?.clock_out || '-')} • ${safe(request.reason)}</small></span><button type="button" class="module-button secondary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="rejected">Tolak</button><button type="button" class="module-button primary" data-action="attendance-review-correction" data-id="${safe(request.id)}" data-decision="approved">Setujui</button></article>`).join('')}
+          ${attendanceReviewQueue.overtime.map(record => `<article class="attendance-review-item" style="border:1px solid #e2e8f0;margin-bottom:6px"><span><strong>${safe(record.employee_name)} • ${safe(record.date)}</strong><small>Lembur ${safe(record.overtime)}</small></span><button type="button" class="module-button secondary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="false">Tolak</button><button type="button" class="module-button primary" data-action="attendance-review-overtime" data-id="${safe(record.id)}" data-decision="true">Setujui</button></article>`).join('')}
+        </div>` : ''}
+      </div>` : '';
 
     const personalStatsHtml = `
       <div class="employee-personal-stats">
@@ -3436,20 +3449,27 @@ function pageMarkup(key) {
     }
 
     const adminTabsHtml = `
-      <div class="att-tabs-bar">
-        <button type="button" class="att-tab-btn ${attendanceActiveTab !== 'self' ? 'active' : ''}" data-action="switch-att-tab" data-tab="team">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          <span>Rekap &amp; Kelola Tim</span>
-        </button>
-        <button type="button" class="att-tab-btn ${attendanceActiveTab === 'self' ? 'active' : ''}" data-action="switch-att-tab" data-tab="self">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Presensi Saya (Mandiri)</span>
-        </button>
+      <div class="att-header-actions-row" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px">
+        <div class="att-tabs-bar" style="margin-bottom:0">
+          <button type="button" class="att-tab-btn ${attendanceActiveTab !== 'self' ? 'active' : ''}" data-action="switch-att-tab" data-tab="team">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            <span>Rekap &amp; Kelola Tim</span>
+          </button>
+          <button type="button" class="att-tab-btn ${attendanceActiveTab === 'self' ? 'active' : ''}" data-action="switch-att-tab" data-tab="self">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            <span>Presensi Saya (Mandiri)</span>
+          </button>
+        </div>
+        ${(isAdmin() || isSupervisor()) ? `
+        <button type="button" class="module-button secondary" data-action="toggle-att-admin" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;padding:8px 14px;border-radius:10px" title="Buka pengaturan radius lokasi GPS kantor & jadwal jam kerja shift">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>Kebijakan &amp; Shift</span>
+        </button>` : ''}
       </div>
     `;
 
     if (attendanceActiveTab === 'self') {
-      return adminTabsHtml + selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml + personalLeaveHistoryHtml;
+      return adminTabsHtml + attAdminDrawerHtml + selfServiceHeroHtml + personalStatsHtml + personalHistoryHtml + personalLeaveHistoryHtml;
     }
 
     const teamOverviewAndTableHtml = `
@@ -3580,6 +3600,11 @@ function pageMarkup(key) {
             </div>
             <span class="toolbar-note">Urutkan:</span>
             <select id="attendanceSortSelect"><option value="0">Nama</option><option value="1">Jabatan</option><option value="4">Check-In / Check-Out</option><option value="7">Status</option></select>
+            ${(isAdmin() || isSupervisor()) ? `
+            <button type="button" class="module-button secondary" data-action="toggle-att-admin" style="display:inline-flex;align-items:center;gap:6px" title="Pengaturan Lokasi Kantor & Shift">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+              <span>Kebijakan &amp; Shift</span>
+            </button>` : ''}
             <button class="module-button secondary att-export-btn" data-action="export-attendance">
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               <span>Ekspor CSV</span>
@@ -3611,7 +3636,7 @@ function pageMarkup(key) {
       </section>
     `;
 
-    return adminTabsHtml + selfServiceHeroHtml + teamOverviewAndTableHtml;
+    return adminTabsHtml + attAdminDrawerHtml + teamOverviewAndTableHtml;
   }
 
   // 8. PERFORMANCE MODULE

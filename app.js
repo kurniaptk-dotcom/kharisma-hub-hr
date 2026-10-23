@@ -2656,92 +2656,144 @@ function pageMarkup(key) {
       <div class="portal-layout">
         <!-- 1. Hero Header Banner Profil -->
         <section class="portal-hero">
+          <div class="portal-hero-decor-circle decor-1"></div>
+          <div class="portal-hero-decor-circle decor-2"></div>
+          
           <div class="portal-hero-profile">
-            <div class="portal-hero-avatar">
-              ${empProf.avatar ? `<img src="https://randomuser.me/api/portraits/${empProf.avatar}.jpg" alt="${safe(myName)}" onerror="this.remove()" />` : initials(myName)}
+            <div class="portal-hero-avatar-wrap">
+              <div class="portal-hero-avatar">
+                ${empProf.avatar ? `<img src="https://randomuser.me/api/portraits/${empProf.avatar}.jpg" alt="${safe(myName)}" onerror="this.remove()" />` : initials(myName)}
+              </div>
+              <span class="portal-avatar-status-dot" style="background:${statusDotColor}"></span>
             </div>
+            
             <div class="portal-hero-info">
-              <h2>Halo, ${safe(myName)} 👋</h2>
-              <p>
-                <span>${safe(myTitle)}</span> &bull; 
-                <span>${safe(myDept)}</span> &bull; 
-                <span>${safe(myEmpId)}</span>
-              </p>
+              <div class="portal-hero-greeting-row">
+                <h2>Halo, ${safe(myName)}</h2>
+                <span class="portal-greeting-badge">Karyawan Aktif</span>
+              </div>
+              <div class="portal-hero-meta-line">
+                <span class="portal-meta-item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="7" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg> ${safe(myTitle)}</span>
+                <span class="portal-meta-sep">•</span>
+                <span class="portal-meta-item"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg> ${safe(myDept)}</span>
+                <span class="portal-meta-sep">•</span>
+                <span class="portal-meta-item code-pill">${safe(myEmpId)}</span>
+              </div>
               <div class="portal-meta-badges">
                 <span class="portal-chip ${statusClass}">
                   <span class="live-pulse-dot ${statusClass === 'active-work' || statusClass === 'overtime' ? 'working' : 'break'}"></span>
                   ${statusText}
                 </span>
-                <span class="portal-chip">${safe(myWorkModel)}</span>
-                <span class="portal-chip">${roleLabel(myRole)}</span>
+                <span class="portal-chip glass"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg> ${safe(myWorkModel)}</span>
+                <span class="portal-chip glass"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg> ${roleLabel(myRole)}</span>
               </div>
             </div>
           </div>
-          <div class="portal-hero-time">
-            <span class="portal-clock" id="portalLiveClockDisplay">${timeFormatted}</span>
-            <span class="portal-date">${dateFormatted}</span>
-            <span class="portal-shift-pill">Shift Reguler • 09:00 - 17:00 WIB</span>
+          
+          <div class="portal-hero-time-widget">
+            <div class="portal-time-widget-inner">
+              <div class="portal-time-header">
+                <span class="portal-live-indicator"><span class="pulse-ring"></span>WAKTU LOKAL</span>
+                <span class="portal-shift-tag">Shift Reguler</span>
+              </div>
+              <div class="portal-clock-display" id="portalLiveClockDisplay">${timeFormatted}</div>
+              <div class="portal-date-display">${dateFormatted}</div>
+              <div class="portal-shift-schedule">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                <span>Jadwal: 09:00 – 17:00 WIB</span>
+              </div>
+            </div>
           </div>
         </section>
 
         <!-- 2. Main Two-Column Grid -->
         <div class="portal-grid-layout">
           <!-- Left Column -->
-          <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;flex-direction:column;gap:18px;">
             <!-- Panel Presensi & Lembur Mandiri -->
-            <section class="module-card" style="margin:0">
-              <div class="module-card-head">
-                <h2 style="font-size:14px;color:#0c1e36;display:flex;align-items:center;gap:7px">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  Kontrol Presensi &amp; Lembur Mandiri
-                </h2>
-                <span style="font-size:11.5px;color:#64748b;display:flex;align-items:center;gap:5px">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2.5"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
-                  ${userAttendanceRecord?.location?.verified ? 'Radius Kantor Terverifikasi' : 'Siap Diverifikasi GPS'}
-                </span>
+            <section class="module-card portal-card" style="margin:0">
+              <div class="portal-card-header">
+                <div class="portal-card-title-group">
+                  <div class="portal-card-icon blue">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div>
+                    <h3>Kontrol Presensi &amp; Lembur Mandiri</h3>
+                    <small>Catat kehadiran hari kerja dan sesi lembur secara mandiri</small>
+                  </div>
+                </div>
+                <div class="portal-gps-badge ${userAttendanceRecord?.location?.verified ? 'verified' : 'ready'}">
+                  <span class="gps-dot"></span>
+                  <span>${userAttendanceRecord?.location?.verified ? 'Radius Terverifikasi' : 'GPS Siap Diverifikasi'}</span>
+                </div>
               </div>
 
-              <!-- 4 Attendance Buttons Grid -->
-              <div class="att-actions-control-grid" style="margin-bottom:12px">
+              <!-- 4 Attendance Action Tiles -->
+              <div class="portal-action-tiles-grid">
                 <!-- Absen Masuk -->
-                <button type="button" class="att-btn-action ${!hasClockedIn ? 'active-cta' : 'disabled-done'}" data-action="attendance-transition" data-transition="clock_in" ${hasClockedIn ? 'disabled' : ''}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
-                  <span>${hasClockedIn ? `Masuk (${safe(userAttendanceRecord.clockIn)})` : 'Absen Masuk'}</span>
+                <button type="button" class="portal-action-tile checkin ${!hasClockedIn ? 'ready-pulse' : 'completed'}" data-action="attendance-transition" data-transition="clock_in" ${hasClockedIn ? 'disabled' : ''}>
+                  <div class="action-tile-icon-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                  </div>
+                  <div class="action-tile-content">
+                    <span class="action-tile-title">Absen Masuk</span>
+                    <span class="action-tile-status">${hasClockedIn ? `Masuk: ${safe(userAttendanceRecord.clockIn)}` : 'Klik untuk Check-In'}</span>
+                  </div>
+                  <span class="action-tile-badge">${hasClockedIn ? '✓ Selesai' : 'Siap'}</span>
                 </button>
 
                 <!-- Absen Keluar -->
-                <button type="button" class="att-btn-action ${canClockOut ? 'active-cta warning' : 'disabled-done'}" data-action="attendance-transition" data-transition="clock_out" ${!canClockOut ? 'disabled' : ''}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-                  <span>${hasClockedOut ? `Pulang (${safe(userAttendanceRecord.clockOut)})` : 'Absen Keluar'}</span>
+                <button type="button" class="portal-action-tile checkout ${canClockOut ? 'ready-pulse' : hasClockedOut ? 'completed' : 'locked'}" data-action="attendance-transition" data-transition="clock_out" ${!canClockOut ? 'disabled' : ''}>
+                  <div class="action-tile-icon-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                  </div>
+                  <div class="action-tile-content">
+                    <span class="action-tile-title">Absen Keluar</span>
+                    <span class="action-tile-status">${hasClockedOut ? `Pulang: ${safe(userAttendanceRecord.clockOut)}` : canClockOut ? 'Klik untuk Check-Out' : 'Belum Check-In'}</span>
+                  </div>
+                  <span class="action-tile-badge">${hasClockedOut ? '✓ Selesai' : canClockOut ? 'Buka' : 'Terkunci'}</span>
                 </button>
 
                 <!-- Mulai Lembur -->
-                <button type="button" class="att-btn-action ${canStartOvertime ? 'active-cta purple' : 'disabled-done'}" data-action="attendance-transition" data-transition="overtime_start" ${!canStartOvertime ? 'disabled' : ''}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span>${isOnOvertime ? 'Lembur Aktif' : 'Mulai Lembur'}</span>
+                <button type="button" class="portal-action-tile overtime-start ${canStartOvertime ? 'ready' : isOnOvertime ? 'completed' : 'locked'}" data-action="attendance-transition" data-transition="overtime_start" ${!canStartOvertime ? 'disabled' : ''}>
+                  <div class="action-tile-icon-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </div>
+                  <div class="action-tile-content">
+                    <span class="action-tile-title">Mulai Lembur</span>
+                    <span class="action-tile-status">${isOnOvertime ? 'Sedang Berjalan' : canStartOvertime ? 'Mulai Sesi Lembur' : 'Setelah Check-In'}</span>
+                  </div>
+                  <span class="action-tile-badge">${isOnOvertime ? '⚡ Aktif' : canStartOvertime ? 'Tersedia' : 'Terkunci'}</span>
                 </button>
 
                 <!-- Selesai Lembur -->
-                <button type="button" class="att-btn-action ${isOnOvertime ? 'active-cta amber pulse' : 'disabled-done'}" data-action="attendance-transition" data-transition="overtime_end" ${!isOnOvertime ? 'disabled' : ''}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                  <span>Selesai Lembur</span>
+                <button type="button" class="portal-action-tile overtime-end ${isOnOvertime ? 'ready-pulse' : 'locked'}" data-action="attendance-transition" data-transition="overtime_end" ${!isOnOvertime ? 'disabled' : ''}>
+                  <div class="action-tile-icon-wrap">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                  </div>
+                  <div class="action-tile-content">
+                    <span class="action-tile-title">Selesai Lembur</span>
+                    <span class="action-tile-status">${isOnOvertime ? 'Hentikan Pencatat Lembur' : 'Tidak Ada Sesi'}</span>
+                  </div>
+                  <span class="action-tile-badge">${isOnOvertime ? 'Siap' : 'Nonaktif'}</span>
                 </button>
               </div>
 
-              <div class="att-cta-sub-row" style="margin-top:8px">
-                <button type="button" class="att-sub-btn primary-leave" data-action="toggle-att-leave" title="Formulir Pengajuan Izin Kerja">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+              <!-- Quick Action Sub-bar -->
+              <div class="portal-quick-actions-bar">
+                <button type="button" class="portal-quick-btn primary" data-action="toggle-att-leave">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
                   <span>+ Ajukan Izin / Cuti Kerja</span>
                 </button>
-                <button type="button" class="att-sub-btn" data-action="toggle-att-correction" title="Ajukan Koreksi Jam Kerja">
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                  <span>Ajukan Koreksi Presensi</span>
+                <button type="button" class="portal-quick-btn secondary" data-action="toggle-att-correction">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                  <span>Ajukan Koreksi Jam Kerja</span>
                 </button>
               </div>
 
               <!-- Drawer Formulir Izin Kerja -->
-              <div id="attLeaveDrawer" class="attendance-drawer" hidden style="margin-top:14px">
-                <form data-attendance-leave-form class="attendance-drawer-form">
+              <div id="attLeaveDrawer" class="attendance-drawer portal-form-drawer" hidden style="margin-top:14px">
+                <form data-attendance-leave-form class="attendance-drawer-form" style="background:#0c1e36;border:1px solid #1e3a5f;color:#fff">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:10px">
                     <div>
                       <h4 style="margin:0;font-size:15px;color:#fff;display:flex;align-items:center;gap:8px">
@@ -2785,8 +2837,8 @@ function pageMarkup(key) {
               </div>
 
               <!-- Drawer Koreksi Presensi -->
-              <div id="attCorrectionDrawer" class="attendance-drawer" hidden style="margin-top:14px">
-                <form data-attendance-correction class="attendance-drawer-form">
+              <div id="attCorrectionDrawer" class="attendance-drawer portal-form-drawer" hidden style="margin-top:14px">
+                <form data-attendance-correction class="attendance-drawer-form" style="background:#0c1e36;border:1px solid #1e3a5f;color:#fff">
                   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,0.15);padding-bottom:8px">
                     <h4 style="margin:0;font-size:14px;color:#fff">Pengajuan Koreksi Jam Kerja</h4>
                     <button type="button" class="att-drawer-close" data-action="toggle-att-correction">&times;</button>
@@ -2807,155 +2859,302 @@ function pageMarkup(key) {
             </section>
 
             <!-- Panel Cuti & Pengajuan Izin Kerja -->
-            <section class="module-card" style="margin:0">
-              <div class="module-card-head">
-                <h2 style="font-size:14px;color:#0c1e36;display:flex;align-items:center;gap:7px">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><line x1="9" y1="14" x2="15" y2="18"/><line x1="15" y1="14" x2="9" y2="18"/></svg>
-                  Manajemen Cuti &amp; Izin Kerja Saya
-                </h2>
-                <button class="module-button primary" data-action="toggle-att-leave" style="font-size:11.5px">+ Ajukan Izin</button>
+            <section class="module-card portal-card" style="margin:0">
+              <div class="portal-card-header">
+                <div class="portal-card-title-group">
+                  <div class="portal-card-icon green">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><line x1="9" y1="14" x2="15" y2="18"/><line x1="15" y1="14" x2="9" y2="18"/></svg>
+                  </div>
+                  <div>
+                    <h3>Manajemen Cuti &amp; Izin Kerja Saya</h3>
+                    <small>Pelacakan hak cuti tahunan dan status persetujuan atasan</small>
+                  </div>
+                </div>
+                <button type="button" class="portal-card-action-btn" data-action="toggle-att-leave">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  <span>+ Ajukan Izin</span>
+                </button>
               </div>
 
-              <!-- Stat Box Kuota -->
-              <div class="portal-stat-row">
-                <div class="portal-stat-box highlight">
-                  <span>Sisa Cuti Tahunan</span>
-                  <strong>${remainingLeaveDays} Hari</strong>
-                  <small>Dari total kuota 12 hari/tahun</small>
+              <!-- 3 Minimalist Stat Widgets -->
+              <div class="portal-stat-grid">
+                <div class="portal-stat-widget highlight">
+                  <div class="stat-widget-top">
+                    <span class="stat-widget-label">Sisa Cuti Tahunan</span>
+                    <span class="stat-widget-icon emerald">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </span>
+                  </div>
+                  <div class="stat-widget-value">${remainingLeaveDays} <small>Hari</small></div>
+                  <div class="stat-progress-bar">
+                    <div class="stat-progress-fill" style="width:${leavePct}%"></div>
+                  </div>
+                  <span class="stat-widget-footer">${remainingLeaveDays} dari 12 hari kuota tahunan</span>
                 </div>
-                <div class="portal-stat-box">
-                  <span>Cuti / Izin Terpakai</span>
-                  <strong>${usedAnnualDays} Hari</strong>
-                  <small>Tahun berjalan 2026</small>
+
+                <div class="portal-stat-widget">
+                  <div class="stat-widget-top">
+                    <span class="stat-widget-label">Cuti / Izin Terpakai</span>
+                    <span class="stat-widget-icon blue">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </span>
+                  </div>
+                  <div class="stat-widget-value">${usedAnnualDays} <small>Hari</small></div>
+                  <div class="stat-progress-bar">
+                    <div class="stat-progress-fill blue" style="width:${Math.round((usedAnnualDays / totalAnnualQuota) * 100)}%"></div>
+                  </div>
+                  <span class="stat-widget-footer">Tahun berjalan 2026</span>
                 </div>
-                <div class="portal-stat-box">
-                  <span>Menunggu Persetujuan</span>
-                  <strong>${pendingLeaves} Pengajuan</strong>
-                  <small>${pendingLeaves > 0 ? 'Sedang ditinjau HRD' : 'Semua telah diproses'}</small>
+
+                <div class="portal-stat-widget">
+                  <div class="stat-widget-top">
+                    <span class="stat-widget-label">Menunggu Persetujuan</span>
+                    <span class="stat-widget-icon amber">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                    </span>
+                  </div>
+                  <div class="stat-widget-value">${pendingLeaves} <small>Pengajuan</small></div>
+                  <div class="stat-progress-bar">
+                    <div class="stat-progress-fill amber" style="width:${pendingLeaves > 0 ? 100 : 0}%"></div>
+                  </div>
+                  <span class="stat-widget-footer">${pendingLeaves > 0 ? 'Sedang ditinjau Atasan & HR' : '✓ Semua permohonan diproses'}</span>
                 </div>
               </div>
 
               <!-- Tabel Riwayat Izin Personal -->
-              <h4 style="font-size:12.5px;color:#334155;margin:12px 0 8px">Riwayat Pengajuan Terakhir</h4>
-              <div class="module-table-wrap">
-                <table class="module-table" style="min-width:540px">
-                  <thead>
-                    <tr>
-                      <th>Jenis Izin</th>
-                      <th>Tanggal</th>
-                      <th>Durasi</th>
-                      <th>Alasan</th>
-                      <th>Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${userLeaves.length ? userLeaves.slice(0, 5).map(l => `
+              <div class="portal-subtable-wrap">
+                <div class="portal-subtable-head">
+                  <h4>Riwayat Pengajuan Izin Kerja &amp; Cuti</h4>
+                  <span class="subtable-badge">${userLeaves.length} Permohonan</span>
+                </div>
+                <div class="module-table-wrap">
+                  <table class="module-table portal-table">
+                    <thead>
                       <tr>
-                        <td><strong>${safe(l.type)}</strong></td>
-                        <td>${safe(l.startDate || l.start || '—')} ${l.endDate && l.endDate !== l.startDate ? `s/d ${safe(l.endDate)}` : ''}</td>
-                        <td><span class="employment-pill">${safe(l.duration || '1 Hari')}</span></td>
-                        <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${safe(l.reason || '—')}</td>
-                        <td>
-                          <span class="status ${l.status === 'Approved' || l.status === 'Disetujui' ? 'ontime' : l.status === 'Rejected' || l.status === 'Ditolak' ? 'absent' : 'leave'}">
-                            ${safe(l.status)}
-                          </span>
-                        </td>
+                        <th>Jenis Izin</th>
+                        <th>Tanggal</th>
+                        <th>Durasi</th>
+                        <th>Alasan</th>
+                        <th>Status</th>
                       </tr>
-                    `).join('') : `
-                      <tr><td colspan="5" class="empty-state">Belum ada riwayat pengajuan izin atau cuti.</td></tr>
-                    `}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      ${userLeaves.length ? userLeaves.slice(0, 5).map(l => `
+                        <tr>
+                          <td><span class="portal-type-pill">${safe(l.type)}</span></td>
+                          <td><span style="font-weight:600;color:#1e293b">${safe(l.startDate || l.start || '—')}</span> ${l.endDate && l.endDate !== l.startDate ? `<small style="color:#64748b"> s/d ${safe(l.endDate)}</small>` : ''}</td>
+                          <td><span class="portal-duration-pill">${safe(l.duration || '1 Hari')}</span></td>
+                          <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#475569">${safe(l.reason || '—')}</td>
+                          <td>
+                            <span class="portal-status-pill ${l.status === 'Approved' || l.status === 'Disetujui' ? 'approved' : l.status === 'Rejected' || l.status === 'Ditolak' ? 'rejected' : 'pending'}">
+                              ${l.status === 'Approved' || l.status === 'Disetujui' ? '✓ Disetujui' : l.status === 'Rejected' || l.status === 'Ditolak' ? '✕ Ditolak' : '⏳ Menunggu'}
+                            </span>
+                          </td>
+                        </tr>
+                      `).join('') : `
+                        <tr>
+                          <td colspan="5" style="text-align:center;padding:32px 16px">
+                            <div class="portal-empty-state">
+                              <div class="empty-icon-circle">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                              </div>
+                              <strong style="display:block;margin-top:8px;font-size:13px;color:#334155">Belum Ada Pengajuan Izin Kerja</strong>
+                              <p style="margin:2px 0 12px;font-size:12px;color:#64748b">Ajukan permohonan sakit, cuti tahunan, atau izin lainnya secara online.</p>
+                              <button type="button" class="portal-quick-btn primary" data-action="toggle-att-leave" style="margin:0 auto">
+                                + Ajukan Izin Sekarang
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      `}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </section>
 
             <!-- Panel Akses Slip Gaji Pribadi -->
-            <section class="module-card" style="margin:0">
-              <div class="module-card-head">
-                <h2 style="font-size:14px;color:#0c1e36;display:flex;align-items:center;gap:7px">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
-                  Slip Gaji Saya (My Official Payslips)
-                </h2>
-                <span class="meta-chip" style="font-size:11px;background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0">Kompensasi Resmi</span>
-              </div>
-              <p style="margin:0 0 12px;font-size:12.5px;color:#64748b">
-                Akses dokumen rincian gaji bulanan Anda yang telah diverifikasi oleh bagian Finance &amp; SDM.
-              </p>
-
-              <div class="portal-payslip-item">
-                <div>
-                  <strong style="display:block;font-size:13.5px;color:#0f172a">Periode Oktober 2026</strong>
-                  <small style="color:#64748b;font-size:11.5px">Dibayarkan: 28 Okt 2026 &bull; Gaji Bersih: <b style="color:#0962ea">${fmtRupiah(estTakeHome)}</b></small>
+            <section class="module-card portal-card" style="margin:0">
+              <div class="portal-card-header">
+                <div class="portal-card-title-group">
+                  <div class="portal-card-icon purple">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/></svg>
+                  </div>
+                  <div>
+                    <h3>Slip Gaji Saya (Official Payslips)</h3>
+                    <small>Rincian gaji bulanan terverifikasi resmi oleh Keuangan &amp; SDM</small>
+                  </div>
                 </div>
-                <button type="button" class="module-button primary" data-action="view-my-payslip" data-name="${safe(myName)}" title="Buka Slip Gaji Resmi">
-                  Lihat &amp; Cetak Slip Gaji
-                </button>
+                <span class="portal-verified-chip">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  Kompensasi Terverifikasi
+                </span>
               </div>
 
-              <div class="portal-payslip-item">
-                <div>
-                  <strong style="display:block;font-size:13.5px;color:#0f172a">Periode September 2026</strong>
-                  <small style="color:#64748b;font-size:11.5px">Dibayarkan: 28 Sep 2026 &bull; Status: <span class="status ontime">Lunas</span></small>
+              <!-- Highlight Current Month Payslip -->
+              <div class="portal-payslip-hero-card">
+                <div class="payslip-hero-left">
+                  <div class="payslip-doc-icon">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  </div>
+                  <div>
+                    <div style="display:flex;align-items:center;gap:8px">
+                      <strong style="font-size:14.5px;color:#0f172a">Periode Oktober 2026</strong>
+                      <span class="portal-badge-new">Bulan Ini</span>
+                    </div>
+                    <small style="color:#64748b;font-size:12px;margin-top:2px;display:block">Jadwal Transfer: 28 Okt 2026 • Rekening Payroll</small>
+                  </div>
                 </div>
-                <button type="button" class="module-button secondary" data-action="view-my-payslip" data-name="${safe(myName)}" title="Buka Arsip Slip Gaji">
-                  Lihat Slip Gaji
-                </button>
+                <div class="payslip-hero-right">
+                  <div class="payslip-amount-col">
+                    <small style="color:#64748b;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Estimasi Gaji Bersih</small>
+                    <strong class="payslip-amount-val">${fmtRupiah(estTakeHome)}</strong>
+                  </div>
+                  <button type="button" class="portal-primary-btn" data-action="view-my-payslip" data-name="${safe(myName)}" title="Buka Slip Gaji Resmi">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    <span>Lihat &amp; Cetak Slip</span>
+                  </button>
+                </div>
               </div>
 
-              <div class="portal-payslip-item">
-                <div>
-                  <strong style="display:block;font-size:13.5px;color:#0f172a">Periode Agustus 2026</strong>
-                  <small style="color:#64748b;font-size:11.5px">Dibayarkan: 28 Agu 2026 &bull; Status: <span class="status ontime">Lunas</span></small>
+              <!-- Previous Archives List -->
+              <div class="portal-payslip-history-list">
+                <div class="portal-payslip-row">
+                  <div class="payslip-row-left">
+                    <div class="payslip-dot-indicator"></div>
+                    <div>
+                      <strong>Periode September 2026</strong>
+                      <small>Dibayarkan: 28 Sep 2026</small>
+                    </div>
+                  </div>
+                  <div class="payslip-row-right">
+                    <span class="portal-status-pill approved">✓ Lunas</span>
+                    <button type="button" class="portal-secondary-btn" data-action="view-my-payslip" data-name="${safe(myName)}">
+                      Buka Dokumen
+                    </button>
+                  </div>
                 </div>
-                <button type="button" class="module-button secondary" data-action="view-my-payslip" data-name="${safe(myName)}" title="Buka Arsip Slip Gaji">
-                  Lihat Slip Gaji
-                </button>
+
+                <div class="portal-payslip-row">
+                  <div class="payslip-row-left">
+                    <div class="payslip-dot-indicator"></div>
+                    <div>
+                      <strong>Periode Agustus 2026</strong>
+                      <small>Dibayarkan: 28 Agu 2026</small>
+                    </div>
+                  </div>
+                  <div class="payslip-row-right">
+                    <span class="portal-status-pill approved">✓ Lunas</span>
+                    <button type="button" class="portal-secondary-btn" data-action="view-my-payslip" data-name="${safe(myName)}">
+                      Buka Dokumen
+                    </button>
+                  </div>
+                </div>
               </div>
             </section>
           </div>
 
           <!-- Right Column -->
-          <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;flex-direction:column;gap:18px;">
             <!-- Riwayat Presensi 7 Hari Terakhir -->
-            <section class="module-card" style="margin:0">
-              <div class="module-card-head">
-                <h2 style="font-size:13.5px;color:#0c1e36">Riwayat Presensi (7 Hari Terakhir)</h2>
-                <a href="attendance.html" style="font-size:11.5px;color:#0962ea;text-decoration:none;font-weight:600">Lihat Semua &rarr;</a>
-              </div>
-              <div style="display:flex;flex-direction:column;gap:8px">
-                ${personalHistory.length ? personalHistory.map(h => `
-                  <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f1f5f9">
-                    <div>
-                      <strong style="display:block;font-size:12.5px;color:#1e293b">${safe(h.dateFormatted || h.dateKey)}</strong>
-                      <small style="color:#64748b;font-size:11px">In: ${safe(h.clockIn || '—')} &bull; Out: ${safe(h.clockOut || '—')} (${safe(h.duration || '—')})</small>
-                    </div>
-                    <span class="status ${h.status === 'Tepat Waktu' || h.status === 'On-Time' ? 'ontime' : h.status === 'Terlambat' || h.status === 'Late' ? 'late' : 'leave'}" style="font-size:11px">
-                      ${safe(h.status || 'Hadir')}
-                    </span>
+            <section class="module-card portal-card" style="margin:0">
+              <div class="portal-card-header">
+                <div class="portal-card-title-group">
+                  <div class="portal-card-icon amber">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
                   </div>
-                `).join('') : `
-                  <p style="color:#94a3b8;font-size:12px;margin:10px 0;text-align:center">Belum ada catatan log kehadiran.</p>
+                  <div>
+                    <h3>Riwayat Presensi (7 Hari)</h3>
+                    <small>Catatan jam masuk &amp; pulang terakhir</small>
+                  </div>
+                </div>
+                <a href="attendance.html" class="portal-header-link">Lihat Semua &rarr;</a>
+              </div>
+
+              <div class="portal-timeline-list">
+                ${personalHistory.length ? personalHistory.map(h => {
+                  const parts = String(h.date || '').split(' ');
+                  const dateNum = parts[0] || '—';
+                  const monthName = parts[1] || 'Okt';
+                  const isLate = h.status === 'Terlambat' || h.status === 'Late';
+                  return `
+                    <div class="portal-timeline-item ${h.isToday ? 'is-today' : ''}">
+                      <div class="timeline-date-chip">
+                        <span class="timeline-date-num">${safe(dateNum)}</span>
+                        <span class="timeline-date-mon">${safe(monthName)}</span>
+                      </div>
+                      <div class="timeline-details">
+                        <div class="timeline-time-row">
+                          <span class="time-stamp-chip clockin" title="Jam Masuk">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            ${safe(h.clockIn || '—')}
+                          </span>
+                          <span class="time-sep">→</span>
+                          <span class="time-stamp-chip clockout" title="Jam Pulang">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="9 21 3 21 3 15"/><line x1="14" y1="10" x2="3" y2="21"/></svg>
+                            ${safe(h.clockOut || '—')}
+                          </span>
+                        </div>
+                        <div class="timeline-submeta">
+                          <span>⏱ ${safe(h.duration || '—')}</span>
+                          ${h.isToday ? '<span class="today-tag">Hari Ini</span>' : ''}
+                        </div>
+                      </div>
+                      <div class="timeline-status-col">
+                        <span class="portal-status-pill ${isLate ? 'late' : 'approved'}">
+                          ${isLate ? 'Terlambat' : 'Tepat Waktu'}
+                        </span>
+                      </div>
+                    </div>
+                  `;
+                }).join('') : `
+                  <p style="color:#94a3b8;font-size:12px;margin:16px 0;text-align:center">Belum ada catatan log kehadiran.</p>
                 `}
               </div>
             </section>
 
             <!-- Informasi Kerja & Pengumuman Resmi -->
-            <section class="module-card" style="margin:0">
-              <div class="module-card-head">
-                <h2 style="font-size:13.5px;color:#0c1e36">Pengumuman &amp; Memo Perusahaan</h2>
-                <span class="status ontime" style="font-size:10px">Aktif</span>
+            <section class="module-card portal-card" style="margin:0">
+              <div class="portal-card-header">
+                <div class="portal-card-title-group">
+                  <div class="portal-card-icon blue">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                  </div>
+                  <div>
+                    <h3>Pengumuman &amp; Memo Perusahaan</h3>
+                    <small>Pembaruan penting untuk seluruh karyawan</small>
+                  </div>
+                </div>
+                <span class="portal-badge-pulse">3 Aktif</span>
               </div>
-              <div class="portal-notice-card">
-                <strong>Jadwal Penggajian Bulan Ini</strong>
-                <p>Proses penggajian periode Oktober 2026 akan ditransfer pada hari Rabu, 28 Oktober 2026. Mohon cek slip gaji Anda setelah tanggal tersebut.</p>
-              </div>
-              <div class="portal-notice-card" style="border-left-color:#3b82f6">
-                <strong>Kebijakan Toleransi Presensi</strong>
-                <p>Batas toleransi keterlambatan adalah 15 menit dari jam shift kerja. Apabila ada kendala teknis atau dinas luar, silakan gunakan fitur Koreksi Presensi.</p>
-              </div>
-              <div class="portal-notice-card" style="border-left-color:#10b981">
-                <strong>Libur Nasional &amp; Cuti Bersama</strong>
-                <p>Agenda libur perusahaan terdekat dapat dilihat secara interaktif pada menu <a href="calendar.html" style="color:#0962ea;font-weight:600">Kalender Kerja</a>.</p>
+
+              <div class="portal-notices-container">
+                <article class="portal-memo-card payroll">
+                  <div class="memo-card-top">
+                    <span class="memo-tag payroll">💰 GAJI &amp; TUNJANGAN</span>
+                    <span class="memo-time">23 Okt 2026</span>
+                  </div>
+                  <h4>Jadwal Penggajian Bulan Ini</h4>
+                  <p>Proses penggajian periode Oktober 2026 akan ditransfer pada hari Rabu, 28 Oktober 2026. Rincian dokumen dapat diakses pada panel slip gaji.</p>
+                </article>
+
+                <article class="portal-memo-card policy">
+                  <div class="memo-card-top">
+                    <span class="memo-tag policy">📋 KEBIJAKAN SDM</span>
+                    <span class="memo-time">20 Okt 2026</span>
+                  </div>
+                  <h4>Kebijakan Toleransi Presensi</h4>
+                  <p>Batas toleransi keterlambatan adalah 15 menit dari jam shift kerja. Apabila ada kendala teknis atau dinas luar kantor, silakan ajukan fitur Koreksi Jam Kerja.</p>
+                </article>
+
+                <article class="portal-memo-card holiday">
+                  <div class="memo-card-top">
+                    <span class="memo-tag holiday">🌴 LIBUR &amp; CUTI</span>
+                    <span class="memo-time">18 Okt 2026</span>
+                  </div>
+                  <h4>Libur Nasional &amp; Cuti Bersama</h4>
+                  <p>Agenda libur perusahaan terdekat dapat dilihat secara interaktif dan lengkap pada menu <a href="calendar.html">Kalender Kerja</a>.</p>
+                </article>
               </div>
             </section>
           </div>

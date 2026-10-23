@@ -437,6 +437,9 @@ if (!Array.isArray(attendancePolicy.shifts) || !attendancePolicy.shifts.length) 
 if (!Array.isArray(attendancePolicy.assignments)) {
   attendancePolicy.assignments = [];
 }
+function getAttendancePolicy() {
+  return attendancePolicy || defaultAttendancePolicy;
+}
 let attendanceReviewQueue = { corrections: [], overtime: [] };
 let attendanceActionPending = false;
 let attendanceActiveTab = 'team';
@@ -1372,6 +1375,7 @@ function renderDashboardScheduleList(day = selectedDate) {
 
 
 function renderDashboardSummary() {
+  if (!document.querySelector('#dashboardView')) return;
   const totalEmployeesEl = document.querySelector('#dashTotalEmployees');
   const attendanceRateEl = document.querySelector('#dashAttendanceRate');
   const leaveRequestsEl = document.querySelector('#dashLeaveRequests');
@@ -2613,15 +2617,19 @@ function pageMarkup(key) {
 
     let statusText = 'Belum Absen Hari Ini';
     let statusClass = 'pending';
+    let statusDotColor = '#f59e0b';
     if (isOnOvertime) {
       statusText = `Sedang Lembur • Sejak ${safe(userAttendanceRecord.overtimeStart || userAttendanceRecord.clockIn)}`;
       statusClass = 'overtime';
+      statusDotColor = '#8b5cf6';
     } else if (hasClockedOut) {
       statusText = `Selesai Bekerja • Pulang ${safe(userAttendanceRecord.clockOut)}`;
       statusClass = 'completed';
+      statusDotColor = '#10b981';
     } else if (isWorking || hasClockedIn) {
       statusText = `Sedang Bekerja • Masuk ${safe(userAttendanceRecord.clockIn)}`;
       statusClass = 'active-work';
+      statusDotColor = '#10b981';
     }
 
     // Leave & Quota
@@ -2638,6 +2646,7 @@ function pageMarkup(key) {
         return sum + (match ? parseInt(match[1], 10) : 1);
       }, 0);
     const remainingLeaveDays = Math.max(0, totalAnnualQuota - usedAnnualDays);
+    const leavePct = Math.round((remainingLeaveDays / totalAnnualQuota) * 100);
 
     // Personal Attendance 7-Day History
     const personalHistory = getPersonalAttendanceHistory().slice(0, 7);

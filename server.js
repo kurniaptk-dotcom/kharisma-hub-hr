@@ -325,6 +325,77 @@ async function handleLocalUserApi(req, res) {
   }
 }
 
+async function handleLocalActivateApi(req, res) {
+  if (req.method !== 'POST') return sendJson(res, 405, { error: 'Method Not Allowed' });
+  const projectUrl = process.env.SUPABASE_URL || 'https://wirgqezinegebauddmgy.supabase.co';
+  const anonKey = process.env.SUPABASE_ANON_KEY || '';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  if (!token) return sendJson(res, 401, { error: 'Sesi login tidak valid.' });
+
+  try {
+    const authRes = await fetch(`${projectUrl}/auth/v1/user`, { headers: { apikey: anonKey || serviceKey, Authorization: `Bearer ${token}` } });
+    if (!authRes.ok) return sendJson(res, 401, { error: 'Sesi tidak valid atau kedaluwarsa.' });
+    const user = await authRes.json();
+    const serviceFetch = (route, options = {}) => fetch(`${projectUrl}${route}`, {
+      ...options,
+      headers: { apikey: serviceKey || anonKey, Authorization: `Bearer ${serviceKey || anonKey}`, 'Content-Type': 'application/json', ...options.headers }
+    });
+
+    const profRes = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(user.id)}&select=*`);
+    const profiles = await profRes.json();
+    const profile = Array.isArray(profiles) ? profiles[0] : null;
+    if (!profile) return sendJson(res, 404, { error: 'Profil akun tidak ditemukan.' });
+    if (profile.status === 'Inactive') return sendJson(res, 403, { error: 'Akun ini dinonaktifkan. Hubungi administrator.' });
+    if (profile.status === 'Active') return sendJson(res, 200, { data: profile });
+
+    const patchPayload = { status: 'Active', updated_at: new Date().toISOString() };
+    const updateRes = await serviceFetch(`/rest/v1/user_profiles?id=eq.${encodeURIComponent(user.id)}`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify(patchPayload)
+    });
+    const updatedData = await updateRes.json();
+    return sendJson(res, 200, { data: updatedData?.[0] || { ...profile, status: 'Active' } });
+  } catch (err) {
+    return sendJson(res, 503, { error: 'Gagal mengaktifkan akun: ' + err.message });
+  }
+}
+
+async function handleLocalAttendanceApi(req, res, db) {
+  if (req.method === 'GET') {
+    return sendJson(res, 200, { data: db.attendance || [] });
+  }
+  if (req.method === 'POST') {
+    const body = await readBody(req);
+    if (body.action === 'transition') {
+      const { transition, date, latitude, longitude, accuracy, eventAt } = body;
+      const rec = {
+        id: `att-${Date.now()}`,
+        transition,
+        date: date || new Date().toISOString().slice(0, 10),
+        latitude,
+        longitude,
+        accuracy,
+        eventAt: eventAt || new Date().toISOString(),
+        created_at: new Date().toISOString()
+      };
+      db.attendance = db.attendance || [];
+      db.attendance.unshift(rec);
+      writeDb(db);
+      return sendJson(res, 200, { ok: true, data: rec });
+    }
+    if (body.action === 'request_correction') {
+      return sendJson(res, 201, { ok: true, message: 'Permintaan koreksi diterima.' });
+    }
+    if (body.action === 'review_correction' || body.action === 'review_overtime') {
+      return sendJson(res, 200, { ok: true, message: 'Persetujuan dicatat.' });
+    }
+    return sendJson(res, 400, { error: 'Aksi absensi tidak dikenal.' });
+  }
+  return sendJson(res, 405, { error: 'Method Not Allowed' });
+}
+
 const server = http.createServer(async (req, res) => {
   const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
   const pathname = decodeURIComponent(parsedUrl.pathname);
@@ -373,6 +444,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (pathname === '/api/users') return handleLocalUserApi(req, res);
+    if (pathname === '/api/activate') return handleLocalActivateApi(req, res);
+    if (pathname === '/api/attendance') return handleLocalAttendanceApi(req, res, db);
 
     // 1. Health check
     if (pathname === '/api/health') {

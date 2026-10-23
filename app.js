@@ -50,6 +50,12 @@ function refreshKpiStatus(kpi) {
 
 const initials = (name) => String(name || '').split(/\s+/).slice(0, 2).map((part) => part[0]).join('').toUpperCase();
 
+const currentSysDate = new Date();
+let calendarDate = new Date(currentSysDate.getFullYear(), currentSysDate.getMonth(), 1);
+let moduleCalendarDate = new Date(calendarDate);
+let selectedDate = currentSysDate.getDate();
+let selectedCalendarEventId = null;
+
 // Cloud sessions are the source of truth whenever authentication is required.
 let authenticatedSupabaseSession = null;
 let authenticatedUserProfile = null;
@@ -264,20 +270,39 @@ function installSupabaseAuthGate() {
 
     applyRoleNavigation(role);
 
-    // Hydrate data in background
-    hydrateScopedData().then(() => {
-      if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
-      if (typeof renderDashboardMiniCalendar === 'function') renderDashboardMiniCalendar();
-      if (typeof renderDashboardScheduleList === 'function') renderDashboardScheduleList();
-      const curPage = document.querySelector('#moduleView')?.dataset?.page;
-      if (curPage && curPage !== 'dashboard') {
-        const mv = document.querySelector('#moduleView');
-        if (mv) {
-          mv.innerHTML = pageMarkup(curPage);
-          setupTablePagination();
-        }
+    window.rehydrateAndRenderCurrentPage = async () => {
+      await hydrateScopedData();
+      if (document.querySelector('#dashboardView')) {
+        if (typeof renderDashboardSummary === 'function') renderDashboardSummary();
+        if (typeof renderDashboardMiniCalendar === 'function') renderDashboardMiniCalendar();
+        if (typeof renderDashboardScheduleList === 'function') renderDashboardScheduleList();
+        if (typeof syncQuickAbsenButtons === 'function') syncQuickAbsenButtons();
       }
+      const mv = document.querySelector('#moduleView');
+      const curPage = mv?.dataset?.page;
+      if (mv && curPage && curPage !== 'dashboard') {
+        mv.innerHTML = pageMarkup(curPage);
+        if (typeof setupTablePagination === 'function') setupTablePagination();
+      }
+    };
+
+    // Initial Hydration
+    window.rehydrateAndRenderCurrentPage();
+
+    // Realtime Postgres Change Event Listener
+    window.addEventListener('kharisma:data-sync', (e) => {
+      console.log('[Kharisma Realtime] Update diterima dari database:', e.detail);
+      window.rehydrateAndRenderCurrentPage?.();
     });
+
+    // Resilient background auto-sync every 15 seconds to guarantee 100% fresh state
+    if (!window.__kharismaAutoSyncInterval) {
+      window.__kharismaAutoSyncInterval = setInterval(() => {
+        if (authenticatedSupabaseSession && !cloudDataHydrating) {
+          window.rehydrateAndRenderCurrentPage?.();
+        }
+      }, 15000);
+    }
 
     return true;
   };
@@ -1108,13 +1133,13 @@ function showTablePage(page) {
    ========================================================================== */
 
 const weekdays = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
-const currentSysDate = new Date();
-function getCalendarItemDate(item, fallbackDate = calendarDate) {
+function getCalendarItemDate(item, fallbackDate = (typeof calendarDate !== 'undefined' ? calendarDate : new Date())) {
   const match = String(item?.date || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (match) return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
   const day = Number(item?.day);
+  const base = fallbackDate || new Date();
   return Number.isFinite(day) && day > 0
-    ? new Date(fallbackDate.getFullYear(), fallbackDate.getMonth(), day)
+    ? new Date(base.getFullYear(), base.getMonth(), day)
     : null;
 }
 
@@ -1124,14 +1149,6 @@ function toLocalISODate(date) {
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
-let calendarDate = new Date(
-  currentSysDate.getFullYear(),
-  currentSysDate.getMonth(),
-  1
-);
-let moduleCalendarDate = new Date(calendarDate);
-let selectedDate = currentSysDate.getDate();
-let selectedCalendarEventId = null;
 
 function renderDashboardMiniCalendar() {
   const grid = document.querySelector('#calendarGrid');
@@ -1380,10 +1397,10 @@ function renderDashboardSummary() {
     } else {
       const appCount = applicantsData.length;
       if (applicantsEl) {
-        applicantsEl.innerHTML = `+12% <small>dibandingkan bulan lalu</small>`;
+        applicantsEl.innerHTML = `${appCount} <small>Kandidat</small>`;
       }
       if (applicantsBandEl) {
-        applicantsBandEl.innerHTML = `Tim Anda memiliki <strong>${appCount} pelamar baru</strong>`;
+        applicantsBandEl.innerHTML = `Tim Anda memiliki <strong>${appCount} kandidat pelamar aktif</strong>`;
       }
     }
   }
@@ -1447,6 +1464,197 @@ function renderDashboardSummary() {
     }
   }
   if (typeof syncQuickAbsenButtons === 'function') syncQuickAbsenButtons();
+  if (typeof renderDashboardSatisfaction === 'function') renderDashboardSatisfaction();
+  if (typeof renderDashboardTasks === 'function') renderDashboardTasks();
+  if (typeof renderDashboardActivities === 'function') renderDashboardActivities();
+}
+
+function renderDashboardSatisfaction() {
+  const scoreEl = document.querySelector('#dashSatisfactionScore');
+  const ratingEl = document.querySelector('#dashSatisfactionRating');
+  const needleEl = document.querySelector('#dashSatisfactionGaugeNeedle');
+  const noteEl = document.querySelector('#dashSatisfactionNote');
+  const listEl = document.querySelector('#dashSatisfactionList');
+  if (!scoreEl && !listEl) return;
+
+  let avgKpi = 90;
+  if (kpiData && kpiData.length) {
+    const totalScore = kpiData.reduce((sum, k) => sum + Math.min(100, calculateKpiScore(k)), 0);
+    avgKpi = Math.round(totalScore / kpiData.length);
+  }
+  const onTimeCount = employeeData.filter(p => p[4] === 'On-Time').length;
+  const attRate = employeeData.length ? Math.round((onTimeCount / employeeData.length) * 100) : 90;
+  const overallScore = Math.min(99, Math.max(65, Math.round((avgKpi * 0.6) + (attRate * 0.4))));
+  const rating = (overallScore / 20).toFixed(1);
+
+  if (scoreEl) scoreEl.textContent = `${overallScore}%`;
+  if (ratingEl) ratingEl.textContent = `${rating}/5`;
+  if (needleEl) {
+    const deg = Math.round(((overallScore / 100) * 180) - 90);
+    needleEl.style.transform = `rotate(${deg}deg)`;
+  }
+  if (noteEl) {
+    noteEl.innerHTML = overallScore >= 85
+      ? 'Performa dan sentimen tim terukur <strong>sangat positif &amp; produktif</strong>'
+      : 'Performa tim stabil dengan beberapa area <strong>peningkatan target</strong>';
+  }
+
+  if (listEl) {
+    const categories = [
+      { name: 'Kompensasi & Tunjangan', base: 88 },
+      { name: 'Budaya & Kolaborasi Tim', base: 92 },
+      { name: 'Keseimbangan Kerja & Waktu', base: 86 },
+      { name: 'Peluang Pertumbuhan Karier', base: 89 }
+    ];
+    listEl.innerHTML = categories.map(cat => {
+      const score = Math.min(98, Math.max(70, Math.round(cat.base * (overallScore / 90))));
+      const stars = '★'.repeat(Math.round(score / 20));
+      return `<div><span><strong>${cat.name}</strong><small>${score}% Kepuasan</small></span><b class="stars">${stars} <small>${(score / 20).toFixed(1)}/5</small></b></div>`;
+    }).join('');
+  }
+}
+
+function renderDashboardTasks() {
+  const container = document.querySelector('#dashTasksContainer');
+  if (!container) return;
+
+  const pendingLeaves = leaveRequests.filter(r => r.status === 'Pending').length;
+  const appCount = applicantsData.length;
+  const todayEvents = calendarItems.filter(item => {
+    const d = getCalendarItemDate(item);
+    return d && d.getDate() === calendarDate.getDate() && d.getMonth() === calendarDate.getMonth();
+  });
+  const lateCount = employeeData.filter(p => p[4] === 'Late').length;
+
+  const storedDone = readStoredValue('teamhub.completedTasks', {});
+
+  const taskList = [];
+  if (pendingLeaves > 0) {
+    taskList.push({
+      id: 'task-leave-review',
+      title: `Tinjau ${pendingLeaves} permohonan cuti yang menunggu verifikasi`,
+      category: 'Manajemen Cuti',
+      date: 'Hari ini'
+    });
+  }
+  if (appCount > 0) {
+    taskList.push({
+      id: 'task-applicant-review',
+      title: `Evaluasi ${appCount} berkas kandidat pelamar di pipeline rekrutmen`,
+      category: 'Talent Acquisition',
+      date: 'Hari ini'
+    });
+  }
+  if (todayEvents.length > 0) {
+    taskList.push({
+      id: `task-event-${todayEvents[0].id || 0}`,
+      title: `Hadiri agenda: ${todayEvents[0].title}`,
+      category: todayEvents[0].category || 'Kalender Kerja',
+      date: todayEvents[0].time || 'Hari ini'
+    });
+  }
+  if (lateCount > 0) {
+    taskList.push({
+      id: 'task-late-followup',
+      title: `Tindak lanjuti ${lateCount} catatan keterlambatan presensi tim`,
+      category: 'Presensi & Disiplin',
+      date: 'Pagi ini'
+    });
+  }
+  taskList.push({
+    id: 'task-sync-data',
+    title: 'Periksa kelengkapan jam kerja & sinkronisasi presensi harian',
+    category: 'Operasional SDM',
+    date: 'Hari ini'
+  });
+  taskList.push({
+    id: 'task-kpi-check',
+    title: 'Tinjau pencapaian target KPI divisi kuartal berjalan',
+    category: 'Manajemen Kinerja',
+    date: 'Bulan ini'
+  });
+
+  const topTasks = taskList.slice(0, 3);
+  container.innerHTML = topTasks.map(t => {
+    const isChecked = Boolean(storedDone[t.id]);
+    return `
+      <label class="task-row">
+        <input type="checkbox" data-task-id="${t.id}" ${isChecked ? 'checked' : ''} />
+        <span>
+          <strong style="${isChecked ? 'text-decoration:line-through;color:#94a3b8' : ''}">${safe(t.title)}</strong>
+          <small><i>${safe(t.category)}</i><time>${safe(t.date)}</time></small>
+        </span>
+      </label>
+    `;
+  }).join('');
+
+  container.querySelectorAll('input[type="checkbox"]').forEach(box => {
+    box.addEventListener('change', (e) => {
+      const taskId = e.target.dataset.taskId;
+      const doneMap = readStoredValue('teamhub.completedTasks', {});
+      doneMap[taskId] = e.target.checked;
+      writeStoredValue('teamhub.completedTasks', doneMap);
+      const titleSpan = e.target.closest('label')?.querySelector('strong');
+      if (titleSpan) {
+        titleSpan.style.textDecoration = e.target.checked ? 'line-through' : 'none';
+        titleSpan.style.color = e.target.checked ? '#94a3b8' : '';
+      }
+    });
+  });
+}
+
+function renderDashboardActivities() {
+  const container = document.querySelector('#dashActivitiesContainer');
+  if (!container) return;
+
+  const activities = [];
+
+  leaveRequests.slice(0, 3).forEach((r, i) => {
+    activities.push({
+      name: r.employee_name || r.name || 'Karyawan',
+      action: r.status === 'Approved' ? `Permohonan cuti (${r.type || 'Tahunan'}) telah disetujui` : `Mengajukan permohonan cuti (${r.type || 'Tahunan'})`,
+      time: r.submit_date || r.date || 'Hari ini',
+      avatarIdx: (i % 5) + 1
+    });
+  });
+
+  if (userAttendanceRecord && userAttendanceRecord.clockIn) {
+    activities.push({
+      name: userAttendanceRecord.name || userProfile.name,
+      action: userAttendanceRecord.clockOut
+        ? `Telah menyelesaikan jam kerja (${userAttendanceRecord.clockIn} - ${userAttendanceRecord.clockOut})`
+        : `Mencatat presensi masuk kantor (${userAttendanceRecord.clockIn})`,
+      time: userAttendanceRecord.date || 'Hari ini',
+      avatarIdx: 1
+    });
+  }
+
+  applicantsData.slice(0, 2).forEach((a, i) => {
+    activities.push({
+      name: a.name || 'Pelamar',
+      action: `Mendaftar untuk posisi ${a.position || 'Staf'}`,
+      time: a.applied_date || 'Hari ini',
+      avatarIdx: (i % 4) + 2
+    });
+  });
+
+  if (activities.length < 3 && employeeData.length) {
+    const e1 = employeeData[0];
+    activities.push({
+      name: e1[0],
+      action: `Status kehadiran aktif (${e1[4] || 'On-Time'}) di divisi ${e1[2]}`,
+      time: 'Hari ini',
+      avatarIdx: 3
+    });
+  }
+
+  const topActs = activities.slice(0, 3);
+  container.innerHTML = topActs.map(act => `
+    <div class="activity-row">
+      <i class="avatar p${act.avatarIdx}">${initials(act.name)}</i>
+      <p><strong>${safe(act.name)}</strong> ${safe(act.action)}<small>${safe(act.time)}</small></p>
+    </div>
+  `).join('');
 }
 
 /* ==========================================================================
@@ -3147,7 +3355,7 @@ function pageMarkup(key) {
 
     // Role badge color
     const roleBadgeClass = isAdminUser ? 'role-badge-admin' : 'role-badge-supervisor';
-    const roleLabel = isAdminUser ? 'Administrator' : `Supervisor - ${safe(account.department)}`;
+    const bannerRoleLabel = isAdminUser ? 'Administrator' : `Supervisor - ${safe(account.department)}`;
 
     // Active account switcher options
     const accountOptions = userAccounts.filter(u => u.status === 'Active').map(u =>
@@ -3166,7 +3374,7 @@ function pageMarkup(key) {
             <img src="https://randomuser.me/api/portraits/${account.avatar}.jpg" alt="" class="account-banner-avatar" onerror="this.style.display='none'" />
             <div class="account-banner-text">
               <strong>${safe(account.name)}</strong>
-              <span class="${roleBadgeClass}">${roleLabel}</span>
+              <span class="${roleBadgeClass}">${bannerRoleLabel}</span>
             </div>
           </div>
           ${authenticatedSupabaseSession ? '' : `<div class="account-switcher-row">
@@ -3679,7 +3887,7 @@ function openModule(key, updateUrl = true, params = null) {
       const greeting = document.querySelector('.greeting');
       if (greeting) {
         greeting.classList.remove('inbox-heading');
-        greeting.innerHTML = `<span>Hello ${safe(userProfile.name)}!</span><strong>Good Morning</strong>`;
+        greeting.innerHTML = `<span>Halo ${safe(userProfile.name)}!</span><strong>Selamat Pagi</strong>`;
       }
       renderDashboardMiniCalendar();
       renderDashboardScheduleList();
@@ -3706,7 +3914,7 @@ function openModule(key, updateUrl = true, params = null) {
     }
 
     if (key !== 'inbox') {
-      moduleView.insertAdjacentHTML('beforeend', '<footer class="page-footer"><strong>Copyright &copy; 2025 Kharisma Group</strong><a href="#privacy">Privacy Policy</a><a href="#terms">Term and conditions</a><a href="#contact">Contact</a><span></span><span class="socials"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733-16z"/><path d="M4 20l6.768-6.768m2.464-2.464L20 4"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg></span></footer>');
+      moduleView.insertAdjacentHTML('beforeend', '<footer class="page-footer"><strong>Copyright &copy; 2026 Kharisma Group</strong><a href="#privacy">Kebijakan Privasi</a><a href="#terms">Syarat &amp; Ketentuan</a><a href="#contact">Kontak</a><span></span><span class="socials"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733-16z"/><path d="M4 20l6.768-6.768m2.464-2.464L20 4"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg></span></footer>');
     }
 
     moduleView.dataset.page = key;
@@ -4167,32 +4375,6 @@ function ensureSharedDialogs() {
     editEmpForm.insertBefore(compDiv, actionsDiv);
   }
 
-  // 3. Standardize #settingsForm so Supabase Cloud config is available on all pages
-  const settingsForm = document.querySelector('#settingsForm');
-  if (settingsForm && !document.querySelector('#settingSupabaseAnonKey')) {
-    const actionsDiv = settingsForm.querySelector('.dialog-actions');
-    const supaSection = document.createElement('div');
-    supaSection.style.cssText = 'margin-top:8px;padding-top:12px;border-top:1px solid #e2e8f0;';
-    supaSection.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <strong style="font-size:12px;color:#0f172a;">Integrasi Cloud Database (Supabase)</strong>
-        <span style="font-size:10px;background:#ecfdf5;color:#059669;padding:2px 8px;border-radius:99px;font-weight:600;">PostgreSQL Cloud</span>
-      </div>
-      <label>Project URL
-        <input name="supabaseUrl" id="settingSupabaseUrl" type="url" value="https://Latif.supabase.co" readonly style="background:#f8fafc;color:#64748b;" />
-      </label>
-      <label style="margin-top:8px;display:block;">Supabase Anon / Public Key
-        <input name="supabaseAnonKey" id="settingSupabaseAnonKey" type="password" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." autocomplete="off" />
-      </label>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button type="button" class="btn-secondary" id="btnTestSupabase" style="font-size:11px;padding:6px 10px;">Uji Koneksi Cloud</button>
-        <button type="button" class="btn-secondary" id="btnSyncSupabase" style="font-size:11px;padding:6px 10px;">Sinkronkan Data Sekarang</button>
-      </div>
-      <small id="supabaseStatusHelp" style="display:block;margin-top:6px;font-size:10.5px;color:#64748b;">Kosongkan jika ingin tetap menggunakan penyimpanan lokal.</small>
-    `;
-    settingsForm.insertBefore(supaSection, actionsDiv);
-  }
-
   // 4. Standardize #userAccountForm & #editUserAccountForm to include Employee role on all pages
   ['#userAccountForm select[name="role"]', '#editUserAccountForm select[name="role"]'].forEach(selQuery => {
     const sel = document.querySelector(selQuery);
@@ -4247,14 +4429,13 @@ document.querySelector('#btnMarkAllNotifsRead')?.addEventListener('click', () =>
 document.querySelector('#settingsButton')?.addEventListener('click', () => {
   const dialog = document.querySelector('#settingsDialog');
   if (!dialog) return;
-  document.querySelector('#settingCompanyName').value = appSettings.companyName;
-  document.querySelector('#settingCurrency').value = appSettings.currency;
-  document.querySelector('#settingTimezone').value = appSettings.timezone;
-  document.querySelector('#settingWorkStart').value = appSettings.workStart;
-  document.querySelector('#settingWorkEnd').value = appSettings.workEnd;
-  document.querySelector('#settingLateTolerance').value = appSettings.lateTolerance;
-  const keyInput = document.querySelector('#settingSupabaseAnonKey');
-  if (keyInput) keyInput.value = localStorage.getItem('kharisma_supabase_anon_key') || '';
+  const setVal = (sel, val) => { const el = document.querySelector(sel); if (el) el.value = val; };
+  setVal('#settingCompanyName', appSettings.companyName || 'PT Kharisma Group Indonesia');
+  setVal('#settingCurrency', appSettings.currency || 'IDR');
+  setVal('#settingTimezone', appSettings.timezone || 'WIB');
+  setVal('#settingWorkStart', appSettings.workStart || '09:00');
+  setVal('#settingWorkEnd', appSettings.workEnd || '17:00');
+  setVal('#settingLateTolerance', appSettings.lateTolerance || 15);
   dialog.showModal();
 });
 

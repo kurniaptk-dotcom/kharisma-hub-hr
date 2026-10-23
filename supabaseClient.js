@@ -80,13 +80,57 @@
       isConnected = true;
       lastSyncTime = new Date();
       dispatchStatus(true, `Cloud Terhubung (${latency}ms)`);
-      // Pending HR records are never uploaded automatically after a login or key change.
-      // The administrator must start a deliberate sync from Settings.
+      setupRealtimeSubscriptions();
       return { ok: true, latency, message: 'Koneksi aktif' };
     } catch (e) {
       isConnected = false;
       dispatchStatus(false, `Koneksi offline: ${e.message}`);
       return { ok: false, message: e.message };
+    }
+  }
+
+  let realtimeChannel = null;
+
+  function setupRealtimeSubscriptions() {
+    if (!client || realtimeChannel) return;
+    try {
+      realtimeChannel = client.channel('realtime-hr-hub')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'employees' }, (payload) => {
+          handleRealtimeChange('employees', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance_records' }, (payload) => {
+          handleRealtimeChange('attendance', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'leave_requests' }, (payload) => {
+          handleRealtimeChange('leave', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'kpi_indicators' }, (payload) => {
+          handleRealtimeChange('kpi', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'calendar_events' }, (payload) => {
+          handleRealtimeChange('calendar', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'applicants' }, (payload) => {
+          handleRealtimeChange('applicants', payload);
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'departments' }, (payload) => {
+          handleRealtimeChange('departments', payload);
+        })
+        .subscribe((status) => {
+          if (status === 'SUBSCRIBED') {
+            console.log('[KharismaDB Realtime] Saluran real-time Supabase aktif.');
+          }
+        });
+    } catch (err) {
+      console.warn('[KharismaDB Realtime] Gagal setup real-time channel:', err);
+    }
+  }
+
+  function handleRealtimeChange(table, payload) {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('kharisma:data-sync', {
+        detail: { table, eventType: payload?.eventType || 'UPDATE', new: payload?.new, old: payload?.old }
+      }));
     }
   }
 

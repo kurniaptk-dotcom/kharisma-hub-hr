@@ -30,7 +30,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="./styles.css?v=20261022_2100" />
+    <link rel="stylesheet" href="./styles.css?v=20261023_0955" />
   </head>
   <body>
     <div class="app-shell">
@@ -64,7 +64,6 @@
           <div class="greeting"><span>Halo Davis!</span><strong>Selamat Pagi</strong></div>
           <div class="top-actions">
             <label class="search-box"><span class="search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></span><input id="searchInput" type="search" placeholder="Cari apa saja..." aria-label="Cari apa saja" /></label>
-            <button type="button" class="cloud-badge local" id="cloudStatusBadge" title="Klik untuk membuka pengaturan Supabase Cloud"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"/></svg><span id="cloudStatusText">Mode Lokal</span></button>
             <button class="top-icon" id="settingsButton" aria-label="Settings" title="Pengaturan"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
             <button class="top-icon notification-icon" id="notificationButton" aria-label="Notifications" title="Notifikasi"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg><i></i></button>
             <button class="user-chip" id="profileButton" title="Profil Davis Levin"><span class="avatar avatar-davis"><img src="https://randomuser.me/api/portraits/men/32.jpg" alt="" loading="lazy" onerror="this.parentElement.classList.add('avatar-fallback');this.remove()" /><span>DL</span></span><span><strong>Davis Levin</strong><small>User</small></span></button>
@@ -73,10 +72,10 @@
 
         <div id="dashboardView">
         <section class="summary-grid" aria-label="HR summary">
-          <article class="summary-card interactive-card" data-action="nav-employees" title="Buka Direktori Karyawan"><div class="summary-top"><span>Total Karyawan</span><button class="kebab" data-action="kebab-employees" aria-label="Total employees options" title="Opsi Karyawan">···</button></div><div class="summary-value" id="dashTotalEmployees">128 <small>Karyawan</small></div><div class="summary-band">Anda bagian dari <strong>tim yang terus berkembang!</strong></div></article>
-          <article class="summary-card interactive-card" data-action="nav-attendance" title="Buka Rekap Kehadiran"><div class="summary-top"><span>Kehadiran</span><button class="kebab" data-action="kebab-attendance" aria-label="Attendance options" title="Opsi Presensi">···</button></div><div class="summary-value" id="dashAttendanceRate">92% <small>Hadir — <b>3</b> Cuti, 1 Terlambat</small></div><div class="summary-band">Kehadiran Anda bulan ini terlihat <strong>sangat baik</strong></div></article>
-          <article class="summary-card interactive-card" data-action="nav-leave" title="Buka Manajemen Cuti"><div class="summary-top"><span>Permintaan Cuti</span><button class="kebab" data-action="kebab-leave" aria-label="Leave request options" title="Opsi Cuti">···</button></div><div class="summary-value" id="dashLeaveRequests">1 <small>Disetujui</small> <b>1</b> <small>Menunggu Tinjauan</small></div><div class="summary-band" id="dashLeaveBand">Tercatat <strong>2 pengajuan cuti</strong> bulan ini</div></article>
-          <article class="summary-card interactive-card" data-action="nav-recruitment" title="Buka Rekrutmen & Pelamar"><div class="summary-top"><span>Pelamar Kerja</span><button class="kebab" data-action="kebab-recruitment" aria-label="Applicant options" title="Opsi Rekrutmen">···</button></div><div class="summary-value" id="dashApplicants">+12% <small>dibandingkan bulan lalu</small></div><div class="summary-band" id="dashApplicantsBand">Tim Anda memiliki <strong>37 pelamar baru</strong></div></article>
+          <article class="summary-card interactive-card" data-action="nav-employees" title="Buka Direktori Karyawan"><div class="summary-top"><span>Total Karyawan</span><button class="kebab" data-action="kebab-employees" aria-label="Total employees options" title="Opsi Karyawan">···</button></div><div class="summary-value" id="dashTotalEmployees">— <small>Karyawan</small></div><div class="summary-band">Memuat data tim dan struktur organisasi...</div></article>
+          <article class="summary-card interactive-card" data-action="nav-attendance" title="Buka Rekap Kehadiran"><div class="summary-top"><span>Kehadiran</span><button class="kebab" data-action="kebab-attendance" aria-label="Attendance options" title="Opsi Presensi">···</button></div><div class="summary-value" id="dashAttendanceRate">—% <small>Menghitung data kehadiran...</small></div><div class="summary-band">Sinkronisasi status presensi harian tim</div></article>
+          <article class="summary-card interactive-card" data-action="nav-leave" title="Buka Manajemen Cuti"><div class="summary-top"><span>Permintaan Cuti</span><button class="kebab" data-action="kebab-leave" aria-label="Leave request options" title="Opsi Cuti">···</button></div><div class="summary-value" id="dashLeaveRequests">— <small>Disetujui</small> <b>—</b> <small>Menunggu Tinjauan</small></div><div class="summary-band" id="dashLeaveBand">Memeriksa permohonan cuti aktif...</div></article>
+          <article class="summary-card interactive-card" data-action="nav-recruitment" title="Buka Rekrutmen & Pelamar"><div class="summary-top"><span>Pelamar Kerja</span><button class="kebab" data-action="kebab-recruitment" aria-label="Applicant options" title="Opsi Rekrutmen">···</button></div><div class="summary-value" id="dashApplicants">— <small>Kandidat</small></div><div class="summary-band" id="dashApplicantsBand">Memuat data pelamar kerja terbaru...</div></article>
         </section>
 
         <div class="dashboard-grid">
@@ -87,11 +86,9 @@
                   <div class="section-title"><button class="month-title" id="monthButton">Oktober 2026 <span>⌄</span></button><div class="calendar-arrows"><button id="prevMonth" aria-label="Previous month">‹</button><button id="nextMonth" aria-label="Next month">›</button></div></div>
                   <div class="calendar-grid" id="calendarGrid"></div>
                   <div class="panel-divider"></div>
-                  <div class="section-title schedule-title"><h2>Jadwal Kegiatan</h2><button class="date-filter" id="scheduleDate"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>22 Okt <span>⌄</span></button></div>
+                  <div class="section-title schedule-title"><h2>Jadwal Kegiatan</h2><button class="date-filter" id="scheduleDate"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;margin-right:4px;"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Hari Ini <span>⌄</span></button></div>
                   <div class="schedule-list" id="schedules">
-                    <article class="schedule-card"><span class="schedule-type">Talent Acquisition</span><strong>Interview — Product Designer Candidate</strong><div><span class="tag">Meeting Room C</span><small>09:00 AM</small><span class="avatar-stack"><i class="avatar mini p1">MT</i><i class="avatar mini p2">ER</i><i class="avatar mini p3">JC</i><b>+3</b></span></div></article>
-                    <article class="schedule-card"><span class="schedule-type">Employee Development</span><strong>Mid-Year Performance Review — Design Dept</strong><div><span class="tag">Notion Review Sheet</span><small>01:00 PM</small><span class="avatar-stack"><i class="avatar mini p4">MT</i><i class="avatar mini p5">ER</i><i class="avatar mini p6">JC</i><b>+2</b></span></div></article>
-                    <article class="schedule-card"><span class="schedule-type">Workplace Engagement</span><strong>Quarterly Policy Review Meeting</strong><div><span class="tag">Conference Room 1A</span><small>03:00 PM</small><span class="avatar-stack"><i class="avatar mini p7">MT</i><i class="avatar mini p8">ER</i><i class="avatar mini p9">JC</i><b>+2</b></span></div></article>
+                    <div style="padding:16px;text-align:center;color:#64748b;font-size:11px">Memuat agenda kerja tim...</div>
                   </div>
                 </section>
               </div>
@@ -118,21 +115,21 @@
                 </section>
 
                 <section class="panel satisfaction-panel">
-                  <div class="section-title"><h2>Kepuasan Karyawan</h2><button class="kebab" aria-label="Satisfaction options">···</button></div>
+                  <div class="section-title"><h2>Kepuasan &amp; Sentimen Tim</h2><button class="kebab" aria-label="Satisfaction options">···</button></div>
                   <div class="satisfaction-main">
                     <div>
-                      <strong>73%</strong>
-                      <span>Karyawan Puas</span>
-                      <div class="satisfaction-overall-stars"><i class="stars-gold">★★★★★</i> <b>4.2/5</b></div>
+                      <strong id="dashSatisfactionScore">90%</strong>
+                      <span>Indeks Kepuasan</span>
+                      <div class="satisfaction-overall-stars"><i class="stars-gold" id="dashSatisfactionStars">★★★★★</i> <b id="dashSatisfactionRating">4.5/5</b></div>
                     </div>
-                    <div class="gauge"><div class="gauge-track"></div><div class="gauge-needle"></div><i></i></div>
+                    <div class="gauge"><div class="gauge-track"></div><div class="gauge-needle" id="dashSatisfactionGaugeNeedle" style="transform: rotate(45deg);"></div><i></i></div>
                   </div>
-                  <div class="satisfaction-note">Ini <strong>meningkat 6%</strong> dibanding bulan lalu</div>
-                  <div class="satisfaction-list">
-                    <div><span><strong>Kompensasi &amp; Tunjangan</strong><small>78% Kepuasan</small></span><b class="stars">★★★★★ <small>4.5/5</small></b></div>
-                    <div><span><strong>Budaya Kerja</strong><small>74% Kepuasan</small></span><b class="stars">★★★★★ <small>4.3/5</small></b></div>
-                    <div><span><strong>Keseimbangan Kerja &amp; Kehidupan</strong><small>71% Kepuasan</small></span><b class="stars">★★★★★ <small>4.1/5</small></b></div>
-                    <div><span><strong>Peluang Pengembangan Karier</strong><small>68% Kepuasan</small></span><b class="stars">★★★★★ <small>3.9/5</small></b></div>
+                  <div class="satisfaction-note" id="dashSatisfactionNote">Performa dan sentimen tim terukur <strong>sangat positif</strong></div>
+                  <div class="satisfaction-list" id="dashSatisfactionList">
+                    <div><span><strong>Kompensasi &amp; Tunjangan</strong><small>88% Kepuasan</small></span><b class="stars">★★★★★ <small>4.4/5</small></b></div>
+                    <div><span><strong>Budaya &amp; Kolaborasi Tim</strong><small>92% Kepuasan</small></span><b class="stars">★★★★★ <small>4.6/5</small></b></div>
+                    <div><span><strong>Keseimbangan Kerja &amp; Waktu</strong><small>86% Kepuasan</small></span><b class="stars">★★★★★ <small>4.3/5</small></b></div>
+                    <div><span><strong>Peluang Pertumbuhan Karier</strong><small>89% Kepuasan</small></span><b class="stars">★★★★★ <small>4.5/5</small></b></div>
                   </div>
                 </section>
               </div>
@@ -140,20 +137,16 @@
 
             <section class="panel employee-attendance" id="attendance">
               <div class="section-title"><h2>Presensi Karyawan</h2><div class="attendance-header-actions"><button type="button" class="dash-absen-btn" id="dashAbsenBtn" data-action="clock-in" title="Catat jam masuk atau pulang hari ini"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span id="dashAbsenBtnText">Absen Masuk</span></button><a href="attendance.html" class="date-filter" title="Buka halaman Absensi &amp; Presensi Mandiri lengkap">Menu Absensi →</a><button class="date-filter" id="attendanceDate">This Month <span>⌄</span></button></div></div>
-              <div class="attendance-totals"><span><b>82</b> Tepat Waktu</span><span><b>11</b> Terlambat</span><span><b>6</b> Cuti</span><span><b>3</b> Tidak Hadir</span></div>
+              <div class="attendance-totals"><span><b>0</b> Tepat Waktu</span><span><b>0</b> Terlambat</span><span><b>0</b> Cuti</span><span><b>0</b> Tidak Hadir</span></div>
               <div class="table-scroll"><table><thead><tr><th>Nama <span>↕</span></th><th>Jabatan <span>↕</span></th><th>Tanggal <span>↕</span></th><th>Jam Masuk <span>↕</span></th><th>Jam Pulang <span>↕</span></th><th>Status <span>↕</span></th></tr></thead><tbody id="employeeRows">
-                <tr><td><span class="employee-cell"><i class="avatar p1">OM</i><span><strong>Olivia Mason</strong><small>EMP-0234</small></span></span></td><td><strong>Marketing</strong><small>Executive Marketing</small></td><td>05 Okt 2026</td><td>08:55 AM</td><td>05:05 PM</td><td><span class="status ontime">On-Time</span></td></tr>
-                <tr><td><span class="employee-cell"><i class="avatar p2">ER</i><span><strong>Ethan Ray</strong><small>EMP-0178</small></span></span></td><td><strong>UI Designer</strong><small>Product Design</small></td><td>05 Okt 2026</td><td>09:14 AM</td><td>05:20 PM</td><td><span class="status late">Late</span></td></tr>
-                <tr><td><span class="employee-cell"><i class="avatar p3">LA</i><span><strong>Lina Armand</strong><small>EMP-0312</small></span></span></td><td><strong>Lab Analyst</strong><small>R&amp;D</small></td><td>05 Okt 2026</td><td>—</td><td>—</td><td><span class="status leave">On Leave</span></td></tr>
-                <tr><td><span class="employee-cell"><i class="avatar p4">JY</i><span><strong>Jacob Yuen</strong><small>EMP-0115</small></span></span></td><td><strong>Site Supervisor</strong><small>Operations</small></td><td>05 Okt 2026</td><td>—</td><td>—</td><td><span class="status absent">Absent</span></td></tr>
-                <tr><td><span class="employee-cell"><i class="avatar p5">MT</i><span><strong>Mia Torres</strong><small>EMP-0289</small></span></span></td><td><strong>HR Officer</strong><small>Human Resources</small></td><td>05 Okt 2026</td><td>08:59 AM</td><td>05:10 PM</td><td><span class="status ontime">On-Time</span></td></tr>
+                <tr><td colspan="6" style="text-align:center;padding:24px;color:#64748b;font-size:12px;">Memuat presensi karyawan...</td></tr>
               </tbody></table></div>
             </section>
           </div>
 
           <div class="column column-three">
             <section class="panel performance-panel" id="performance">
-              <div class="section-title"><h2>Kinerja Tim</h2><button class="date-filter period-button">Last 6 Months <span>⌄</span></button></div>
+              <div class="section-title"><h2>Kinerja Tim</h2><button class="date-filter period-button">6 Bulan Terakhir <span>⌄</span></button></div>
               <div class="performance-score">89.52%</div>
               <div class="performance-change"><span>↗ +3.84%</span> Meningkat dari minggu lalu</div>
               <div class="performance-chart">
@@ -162,42 +155,41 @@
                   <div class="chart-grid"><i></i><i></i><i></i><i></i><i></i></div>
                   <svg viewBox="0 0 300 120" preserveAspectRatio="none" aria-label="Team performance trend"><defs><linearGradient id="chartFill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#0962ea" stop-opacity=".22"/><stop offset="1" stop-color="#0962ea" stop-opacity="0"/></linearGradient></defs><path class="chart-area-fill" d="M0 79 C22 68 29 65 47 70 S77 68 95 61 S119 65 138 58 S161 43 181 46 S205 39 225 23 S248 37 265 40 S285 27 300 24 L300 120 L0 120 Z"/><path class="chart-line" d="M0 79 C22 68 29 65 47 70 S77 68 95 61 S119 65 138 58 S161 43 181 46 S205 39 225 23 S248 37 265 40 S285 27 300 24"/><line class="chart-marker" x1="225" x2="225" y1="20" y2="116"/><circle cx="225" cy="23" r="4"/></svg>
                   <div class="chart-tooltip">Mei 2026<br /><strong>95.2%</strong></div>
-                  <div class="chart-months"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>May</span><span>Jun</span></div>
+                  <div class="chart-months"><span>Jan</span><span>Feb</span><span>Mar</span><span>Apr</span><span>Mei</span><span>Jun</span></div>
                 </div>
               </div>
             </section>
 
             <section class="panel employment-panel">
               <div class="section-title"><h2>Status Kepegawaian</h2><button class="kebab" aria-label="Employment options">···</button></div>
-              <div class="employment-total">128 <small>Karyawan</small></div>
+              <div class="employment-total">— <small>Karyawan</small></div>
               <div class="employment-bar"><i></i><i></i><i></i><i></i></div>
               <div class="employment-range"><span>0%</span><span>100%</span></div>
               <div class="employment-legend">
-                <div><i class="legend-full"></i><span><strong>Penuh Waktu</strong><small>68% — 87 Karyawan</small></span></div>
-                <div><i class="legend-part"></i><span><strong>Paruh Waktu</strong><small>15% — 19 Karyawan</small></span></div>
-                <div><i class="legend-free"></i><span><strong>Lepas/Kontrak</strong><small>10% — 13 Karyawan</small></span></div>
-                <div><i class="legend-intern"></i><span><strong>Magang</strong><small>7% — 9 Karyawan</small></span></div>
+                <div><i class="legend-full"></i><span><strong>Penuh Waktu</strong><small>Memuat...</small></span></div>
+                <div><i class="legend-part"></i><span><strong>Paruh Waktu</strong><small>Memuat...</small></span></div>
+                <div><i class="legend-free"></i><span><strong>Lepas/Kontrak</strong><small>Memuat...</small></span></div>
+                <div><i class="legend-intern"></i><span><strong>Magang</strong><small>Memuat...</small></span></div>
               </div>
             </section>
 
             <section class="panel tasks-panel" id="tasks">
-              <div class="section-title"><h2>Tugas</h2><button class="kebab" aria-label="Task options">···</button></div>
-              <label class="task-row"><input type="checkbox" /><span><strong>Complete pre-session survey for Leadership Track</strong><small><i>Employee Development</i><time>28 Oktober 2026</time></small></span></label>
-              <label class="task-row"><input type="checkbox" /><span><strong>Join Remote Work Compliance Briefing</strong><small><i>Workplace Engagement</i><time>24 Oktober 2026</time></small></span></label>
-              <label class="task-row"><input type="checkbox" checked /><span><strong>Prepare Q4 recruitment planning materials</strong><small><i>Talent Acquisition</i><time>23 Oktober 2026</time></small></span></label>
+              <div class="section-title"><h2>Tugas &amp; Tindakan Cepat</h2><button class="kebab" aria-label="Task options">···</button></div>
+              <div id="dashTasksContainer">
+                <div style="padding:14px;color:#64748b;font-size:11px;text-align:center;">Memuat tugas tim...</div>
+              </div>
             </section>
 
-            <section class="panel activities-panel">
+            <section class="panel activities-panel" id="activitiesPanel">
               <div class="section-title"><h2>Aktivitas Terkini</h2><button class="kebab" aria-label="Activity options">···</button></div>
-              <div class="activity-row"><i class="avatar p5">MT</i><p><strong>Mia Torres</strong> menyetujui 2 permintaan cuti<small>05 Okt 2026 - 10:32 AM</small></p></div>
-              <div class="activity-row"><i class="avatar dark-avatar">ER</i><p><strong>Ethan Ray</strong> memperbarui informasi kontak darurat<small>05 Okt 2026 - 09:45 AM</small></p></div>
-              <div class="activity-row"><i class="avatar p2">JY</i><p><strong>Jacob Yuen</strong> otomatis ditandai tidak hadir karena tidak presensi<small>05 Okt 2026 - 09:15 AM</small></p></div>
+              <div id="dashActivitiesContainer">
+                <div style="padding:14px;color:#64748b;font-size:11px;text-align:center;">Memuat riwayat aktivitas...</div>
+              </div>
             </section>
           </div>
         </div>
         <footer class="page-footer"><strong>Copyright © 2026 Kharisma Group</strong><a href="#privacy">Kebijakan Privasi</a><a href="#terms">Syarat &amp; Ketentuan</a><a href="#contact">Kontak</a><span></span><span class="socials"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l11.733 16h4.267l-11.733-16z"/><path d="M4 20l6.768-6.768m2.464-2.464L20 4"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="20" x="2" y="2" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" x2="17.51" y1="6.5" y2="6.5"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/><polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/></svg><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect width="4" height="12" x="2" y="9"/><circle cx="4" cy="4" r="2"/></svg></span></footer>
         </div>
-        <section id="moduleView" class="module-view" hidden></section>
       </main>
     </div>
 
@@ -220,16 +212,7 @@
     <dialog class="record-dialog medium-dialog" id="notificationsDialog"><div class="module-dialog-head"><div><span class="module-eyebrow">PUSAT PEMBERITAHUAN</span><h2>Notifikasi Terkini</h2></div><button type="button" class="dialog-close" data-close-notif aria-label="Close">&times;</button></div><p class="dialog-desc">Aktivitas dan pembaruan penting di ruang kerja Kharisma Hub Anda.</p><div class="notif-list" id="notifListContainer"></div><div class="dialog-actions"><button type="button" class="module-button secondary" id="btnMarkAllNotifsRead">Tandai Semua Dibaca</button><button type="button" class="module-button primary" data-close-notif>Selesai</button></div></dialog>
 
     <!-- Settings Dialog -->
-    <dialog class="record-dialog medium-dialog" id="settingsDialog"><form id="settingsForm"><div class="module-dialog-head"><div><span class="module-eyebrow">PENGATURAN RUANG KERJA</span><h2>Konfigurasi Kharisma Hub</h2></div><button type="button" class="dialog-close" data-close-settings aria-label="Close">&times;</button></div><div class="settings-section"><h4>Organisasi &amp; Perusahaan</h4><label>Nama Perusahaan<input name="companyName" id="settingCompanyName" value="PT Kharisma Group Indonesia" required /></label><div class="dialog-two"><label>Mata Uang Default<select name="currency" id="settingCurrency"><option value="IDR">Rupiah Indonesia (IDR)</option><option value="USD">US Dollar (USD)</option></select></label><label>Zona Waktu<select name="timezone" id="settingTimezone"><option value="WIB">WIB (UTC+7)</option><option value="WITA">WITA (UTC+8)</option><option value="WIT">WIT (UTC+9)</option></select></label></div></div><div class="settings-section"><h4>Kebijakan Presensi &amp; Hari Kerja</h4><div class="dialog-two"><label>Jam Masuk Kantor<input name="workStart" type="time" id="settingWorkStart" value="09:00" /></label><label>Jam Pulang Kantor<input name="workEnd" type="time" id="settingWorkEnd" value="17:00" /></label></div><label>Toleransi Keterlambatan (menit)<input name="lateTolerance" type="number" id="settingLateTolerance" value="15" min="0" max="60" /></label></div>            <div class="settings-section">
-        <h4>Koneksi Supabase Cloud</h4>
-        <label>Supabase Project URL<input name="supabaseUrl" id="settingSupabaseUrl" value="https://wirgqezinegebauddmgy.supabase.co" readonly style="background:#f8fafc;color:#64748b;cursor:not-allowed;" /></label>
-        <label>Supabase Anon Key (API Public Key)<input name="supabaseAnonKey" id="settingSupabaseAnonKey" type="password" placeholder="Tempelkan anon public key Anda di sini..." /></label>
-        <div style="display:flex;gap:8px;margin-top:8px;">
-          <button type="button" class="module-button secondary" id="btnTestSupabase" style="flex:1;font-size:12px;padding:6px 10px;">Tes Koneksi Cloud</button>
-          <button type="button" class="module-button secondary" id="btnSyncSupabase" style="flex:1;font-size:12px;padding:6px 10px;">Sinkronisasi Semua Data</button>
-        </div>
-        <small id="supabaseStatusHelp" style="color:#64748b;font-size:11px;display:block;margin-top:6px;">Status: Memeriksa koneksi Supabase...</small>
-      </div>
+    <dialog class="record-dialog medium-dialog" id="settingsDialog"><form id="settingsForm"><div class="module-dialog-head"><div><span class="module-eyebrow">PENGATURAN RUANG KERJA</span><h2>Konfigurasi Kharisma Hub</h2></div><button type="button" class="dialog-close" data-close-settings aria-label="Close">&times;</button></div><div class="settings-section"><h4>Organisasi &amp; Perusahaan</h4><label>Nama Perusahaan<input name="companyName" id="settingCompanyName" value="PT Kharisma Group Indonesia" required /></label><div class="dialog-two"><label>Mata Uang Default<select name="currency" id="settingCurrency"><option value="IDR">Rupiah Indonesia (IDR)</option><option value="USD">US Dollar (USD)</option></select></label><label>Zona Waktu<select name="timezone" id="settingTimezone"><option value="WIB">WIB (UTC+7)</option><option value="WITA">WITA (UTC+8)</option><option value="WIT">WIT (UTC+9)</option></select></label></div></div><div class="settings-section"><h4>Kebijakan Presensi &amp; Hari Kerja</h4><div class="dialog-two"><label>Jam Masuk Kantor<input name="workStart" type="time" id="settingWorkStart" value="09:00" /></label><label>Jam Pulang Kantor<input name="workEnd" type="time" id="settingWorkEnd" value="17:00" /></label></div><label>Toleransi Keterlambatan (menit)<input name="lateTolerance" type="number" id="settingLateTolerance" value="15" min="0" max="60" /></label></div>            
 <div class="dialog-actions"><button type="button" class="module-button secondary" data-close-settings>Batal</button><button type="submit" class="module-button primary">Simpan Pengaturan</button></div></form></dialog>
 
     
@@ -367,25 +350,33 @@
     <dialog class="record-dialog" id="userAccountDialog">
       <form id="userAccountForm">
         <div class="module-dialog-head">
-          <div><span class="module-eyebrow">MANAJEMEN PENGGUNA</span><h2>Tambah Akun Pengguna Baru</h2></div>
+          <div><span class="module-eyebrow">MANAJEMEN PENGGUNA</span><h2>Tambah &amp; Undang Akun Pengguna</h2></div>
           <button type="button" class="dialog-close" data-close-user-dialog aria-label="Close">&times;</button>
         </div>
         <div class="dialog-two">
-          <label>Nama Lengkap<input name="name" required placeholder="mis. Sari Dewi" /></label>
-          <label>Email Kantor<input name="email" type="email" required placeholder="nama@kharismahub.com" /></label>
-        </div>
-        <div class="dialog-two">
-          <label>Role / Peran<select name="role">
-            <option value="Employee">Karyawan (Employee)</option>
+          <label>Pilih Dari Karyawan Terdaftar (Opsional)
+            <select id="userAcctEmployeeSelect">
+              <option value="">-- Pilih karyawan atau isi manual --</option>
+            </select>
+          </label>
+          <label>Role / Peran<select name="role" id="userAcctRole">
+            <option value="Employee">Karyawan</option>
             <option value="Supervisor">Supervisor Divisi</option>
             <option value="Admin">Administrator</option>
           </select></label>
-          <label>Departemen yang Dikelola<select name="department" id="userAcctDept" required></select></label>
         </div>
-        <label>Jabatan<input name="title" placeholder="mis. Marketing Team Lead" /></label>
+        <div class="dialog-two">
+          <label>Nama Lengkap<input name="name" id="userAcctName" required placeholder="mis. Sari Dewi" /></label>
+          <label>Email Kantor<input name="email" id="userAcctEmail" type="email" required placeholder="nama@kharismahub.com" /></label>
+        </div>
+        <div class="dialog-two">
+          <label>Departemen<select name="department" id="userAcctDept" required></select></label>
+          <label>Jabatan<input name="title" id="userAcctTitle" placeholder="mis. Marketing Team Lead" /></label>
+        </div>
+        <p style="font-size:12px;color:#64748b;margin:4px 0 12px">Undangan login dan tautan pembuatan kata sandi akan dikirim ke alamat email di atas via Supabase Auth.</p>
         <div class="dialog-actions">
           <button type="button" class="module-button secondary" data-close-user-dialog>Batal</button>
-          <button type="submit" class="module-button primary">Tambah Akun</button>
+          <button type="submit" class="module-button primary">Kirim Undangan Akun</button>
         </div>
       </form>
     </dialog>
@@ -404,7 +395,7 @@
         </div>
         <div class="dialog-two">
           <label>Role / Peran<select name="role" id="editUserAcctRole">
-            <option value="Employee">Karyawan (Employee)</option>
+            <option value="Employee">Karyawan</option>
             <option value="Supervisor">Supervisor Divisi</option>
             <option value="Admin">Administrator</option>
           </select></label>
@@ -414,7 +405,8 @@
           <label>Jabatan<input name="title" id="editUserAcctTitle" /></label>
           <label>Status Akun<select name="status" id="editUserAcctStatus">
             <option value="Active">Aktif</option>
-            <option value="Inactive">Nonaktif</option>
+            <option value="Pending">Menunggu Aktivasi</option>
+            <option value="Inactive">Nonaktif (Diblokir)</option>
           </select></label>
         </div>
         <div class="dialog-actions">
@@ -426,9 +418,9 @@
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
         <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" charset="UTF-8"></script>
-    <script src="./supabaseClient.js?v=20261022_2100" charset="UTF-8"></script>
-    <script src="./app.js?v=20261022_2100" charset="UTF-8"></script>
-    <script src="./i18n-id.js?v=20261022_2100" charset="UTF-8"></script>
-    <script src="./motion.js?v=20261022_2100" charset="UTF-8"></script>
+    <script src="./supabaseClient.js?v=20261023_0955" charset="UTF-8"></script>
+    <script src="./app.js?v=20261023_0955" charset="UTF-8"></script>
+    <script src="./i18n-id.js?v=20261023_0955" charset="UTF-8"></script>
+    <script src="./motion.js?v=20261023_0955" charset="UTF-8"></script>
   </body>
 </html>
